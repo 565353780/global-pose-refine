@@ -12,7 +12,7 @@ from tqdm import tqdm
 from global_pose_refine.Model.gcnn.gcnn import GCNN
 
 
-class RelationDetector(object):
+class Detector(object):
 
     def __init__(self, model_file_path=None):
         self.model = GCNN().cuda()
@@ -24,7 +24,7 @@ class RelationDetector(object):
     def loadModel(self, model_file_path):
         assert os.path.exists(model_file_path)
 
-        print("[INFO][RelationDetector::loadModel]")
+        print("[INFO][Detector::loadModel]")
         print("\t start loading model from :")
         print("\t", model_file_path)
         model_dict = torch.load(model_file_path)
