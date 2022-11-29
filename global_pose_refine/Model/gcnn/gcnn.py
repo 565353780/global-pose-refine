@@ -209,14 +209,7 @@ class GCNN(nn.Module):
             'mask_total_relation_feature'] = mask_total_relation_feature
         return data
 
-    def forward(self, data):
-        data = self.getMap(data)
-
-        data = self.embedFeatures(data)
-
-        #  rel_masks, obj_masks, lo_masks, obj_obj_map, subj_pred_map, obj_pred_map = maps
-
-        layout_mask = data['predictions']['layout_mask']
+    def updateFeature(self, data):
         object_mask = data['predictions']['object_mask']
         total_map = data['predictions']['total_map']
         subj_pred_map = data['predictions']['subj_pred_map']
@@ -267,6 +260,15 @@ class GCNN(nn.Module):
 
         obj_feats_wolo = total_feature_list[-1][object_mask[0]]
 
+        data['predictions']['update_total_feature'] = total_feature_list[-1]
+        data['predictions']['obj_feats_wolo'] = obj_feats_wolo
+        return data
+
+    def decodeFeature(self, data):
+        layout_mask = data['predictions']['layout_mask']
+        update_total_feature = data['predictions']['update_total_feature']
+        obj_feats_wolo = data['predictions']['obj_feats_wolo']
+
         # branch to predict the bbox_scale
         size = self.fc1(obj_feats_wolo)
         size = self.relu_1(size)
@@ -285,9 +287,33 @@ class GCNN(nn.Module):
         centroid = self.dropout_1(centroid)
         centroid = self.fc_centroid(centroid)
 
-        obj_feats_lo = total_feature_list[-1][layout_mask[0]]
+        obj_feats_lo = update_total_feature[layout_mask[0]]
 
         data['predictions']['refine_bbox_scale_diff'] = size
         data['predictions']['refine_rotation_diff'] = ori
         data['predictions']['refine_center_diff'] = centroid
+
+        #  if self.training:
+        data = self.loss(data)
+        return data
+
+    def loss(self, data):
+        return data
+
+    def setWeight(self, data):
+        #  if self.training:
+        #  return
+
+        return data
+
+    def forward(self, data):
+        data = self.getMap(data)
+
+        data = self.embedFeatures(data)
+
+        data = self.updateFeature(data)
+
+        data = self.decodeFeature(data)
+
+        data = self.setWeight(data)
         return data
