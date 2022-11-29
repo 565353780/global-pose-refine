@@ -14,21 +14,21 @@ class GCNN(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.lo_features = ['layout_position']
-        self.obj_features = ['object_position', 'object_bbox']
-        self.rel_features = ['position_dist', 'bbox_eiou', 'bbox_diff']
+        self.lo_features = ['layout_center', 'layout_bbox']
+        self.obj_features = ['object_center', 'object_bbox']
+        self.rel_features = ['center_dist', 'bbox_eiou']
 
         self.feature_dim = 512
         self.feat_update_step = 4
         self.feat_update_group = 1
 
         self.feature_length = {
-            'layout_position': 3,
-            'object_position': 3,
-            'object_bbox': 3,
-            'position_dist': 1,
+            'layout_center': 3,
+            'layout_bbox': 6,
+            'object_center': 3,
+            'object_bbox': 6,
+            'center_dist': 1,
             'bbox_eiou': 1,
-            'bbox_diff': 6,
         }
 
         obj_features_len = sum(
@@ -87,10 +87,10 @@ class GCNN(nn.Module):
         return
 
     def getMap(self, data):
-        device = data['predictions']['layout_position'].device
+        device = data['inputs'][self.obj_features[0]].device
 
-        object_num = data['predictions']['object_position'].shape[1]
-        layout_num = data['predictions']['layout_position'].shape[1]
+        object_num = data['inputs'][self.obj_features[0]].shape[1]
+        layout_num = data['inputs'][self.lo_features[0]].shape[1]
         total_num = layout_num + object_num
 
         total_map = torch.ones([total_num, total_num]).to(device)
@@ -101,8 +101,9 @@ class GCNN(nn.Module):
         layout_mask[object_num:] = True
 
         object_index = torch.arange(0, total_num, dtype=torch.long).to(device)
-        subject_index_grid, object_index_grid = torch.meshgrid(
-            object_index, object_index, indexing='ij')
+        subject_index_grid, object_index_grid = torch.meshgrid(object_index,
+                                                               object_index,
+                                                               indexing='ij')
         edges = torch.stack(
             [subject_index_grid.reshape(-1),
              object_index_grid.reshape(-1)], -1)
@@ -130,10 +131,9 @@ class GCNN(nn.Module):
         return data
 
     def embedObjectFeature(self, data):
-        object_position = data['predictions']['object_position']
-        object_bbox = data['predictions']['object_bbox']
-
-        object_feature_list = [object_position, object_bbox]
+        object_feature_list = []
+        for key in self.obj_features:
+            object_feature_list.append(data['inputs'][key])
 
         cat_object_feature = torch.cat(object_feature_list, -1)
 
@@ -144,9 +144,9 @@ class GCNN(nn.Module):
         return data
 
     def embedLayoutFeature(self, data):
-        layout_position = data['predictions']['layout_position']
-
-        layout_feature_list = [layout_position]
+        layout_feature_list = []
+        for key in self.lo_features:
+            layout_feature_list.append(data['inputs'][key])
 
         cat_layout_feature = torch.cat(layout_feature_list, -1)
 
@@ -157,11 +157,9 @@ class GCNN(nn.Module):
         return data
 
     def embedRelationFeature(self, data):
-        position_dist = data['predictions']['position_dist']
-        bbox_eiou = data['predictions']['bbox_eiou']
-        bbox_diff = data['predictions']['bbox_diff']
-
-        relation_feature_list = [position_dist, bbox_eiou, bbox_diff]
+        relation_feature_list = []
+        for key in self.rel_features:
+            relation_feature_list.append(data['inputs'][key])
 
         cat_relation_feature = torch.cat(relation_feature_list, -1)
 

@@ -4,11 +4,16 @@
 import os
 
 import numpy as np
+import open3d as o3d
 import torch
+from auto_cad_recon.Module.dataset_manager import DatasetManager
+from points_shape_detect.Data.bbox import BBox
+from points_shape_detect.Loss.ious import IoULoss
+from points_shape_detect.Method.bbox import (getBBoxPointList,
+                                             getOpen3DBBoxFromBBoxArray)
+from scipy.spatial.transform import Rotation as R
 from torch.utils.data import Dataset
 from tqdm import tqdm
-
-from auto_cad_recon.Module.dataset_manager import DatasetManager
 
 
 class ObjectPositionDataset(Dataset):
@@ -26,33 +31,33 @@ class ObjectPositionDataset(Dataset):
         return
 
     def reset(self):
-        self.cad_model_file_path_list = []
+        self.object_position_set_list = []
         return True
 
     def updateIdx(self, random=False):
-        model_num = len(self.cad_model_file_path_list)
-        if model_num == 1:
+        loaded_data_num = len(self.object_position_set_list)
+        if loaded_data_num == 1:
             self.train_idx_list = [0]
             self.eval_idx_list = [0]
             return True
 
-        assert model_num > 0
+        assert loaded_data_num > 0
 
-        train_model_num = int(model_num * self.training_percent)
-        if train_model_num == 0:
-            train_model_num += 1
-        elif train_model_num == model_num:
-            train_model_num -= 1
+        train_data_num = int(loaded_data_num * self.training_percent)
+        if train_data_num == 0:
+            train_data_num += 1
+        elif train_data_num == loaded_data_num:
+            train_data_num -= 1
 
         if random:
-            random_idx_list = np.random.choice(np.arange(model_num),
-                                               size=model_num,
+            random_idx_list = np.random.choice(np.arange(loaded_data_num),
+                                               size=loaded_data_num,
                                                replace=False)
         else:
-            random_idx_list = np.arange(model_num)
+            random_idx_list = np.arange(loaded_data_num)
 
-        self.train_idx_list = random_idx_list[:train_model_num]
-        self.eval_idx_list = random_idx_list[train_model_num:]
+        self.train_idx_list = random_idx_list[:train_data_num]
+        self.eval_idx_list = random_idx_list[train_data_num:]
         return True
 
     def loadScan2CAD(self):
@@ -78,12 +83,35 @@ class ObjectPositionDataset(Dataset):
         for scene_name in tqdm(scene_name_list):
             object_file_name_list = dataset_manager.getScanNetObjectFileNameList(
                 scene_name)
-            object_position_set = []
+
+            bbox_list = []
+            center_list = []
             for object_file_name in object_file_name_list:
                 shapenet_model_dict = dataset_manager.getShapeNetModelDict(
                     scene_name, object_file_name)
-                print(shapenet_model_dict.keys())
-                exit()
+                trans_matrix = shapenet_model_dict['trans_matrix']
+                shapenet_model_file_path = shapenet_model_dict[
+                    'shapenet_model_file_path']
+
+                cad_mesh = o3d.io.read_triangle_mesh(shapenet_model_file_path)
+                cad_mesh.transform(trans_matrix)
+                cad_bbox = cad_mesh.get_axis_aligned_bounding_box()
+
+                cad_center = cad_bbox.get_center()
+                min_point = cad_bbox.min_bound
+                max_point = cad_bbox.max_bound
+                bbox = np.hstack((min_point, max_point))
+
+                bbox_list.append(bbox)
+                center_list.append(cad_center)
+
+            bbox_array = np.array(bbox_list)
+            center_array = np.array(center_list)
+
+            object_position_set = [bbox_array, center_array]
+            self.object_position_set_list.append(object_position_set)
+            if len(self.object_position_set_list) > 2:
+                return True
         return True
 
     def __getitem__(self, idx, training=True):
@@ -93,22 +121,46 @@ class ObjectPositionDataset(Dataset):
             idx = self.eval_idx_list[idx]
 
         object_position_set = self.object_position_set_list[idx]
+        bbox_array, center_array = object_position_set
+        bbox_array = torch.from_numpy(bbox_array).float()
+        center_array = torch.from_numpy(center_array).float()
+
+        layout_bbox_array = torch.zeros(5, 6).float()
+        layout_center_array = torch.zeros(5, 3).float()
+
+        object_num = bbox_array.shape[0]
+        layout_num = layout_bbox_array.shape[0]
+
+        center_dist_list = [
+            np.linalg.norm(center2 - center1, ord=2)
+            for center1 in center_array for center2 in center_array
+        ]
+        bbox_eiou_list = [
+            IoULoss.EIoU(bbox1, bbox2) for bbox1 in bbox_array
+            for bbox2 in bbox_array
+        ]
+        center_dist = torch.tensor(center_dist_list).float().unsqueeze(-1)
+        bbox_eiou = torch.tensor(bbox_eiou_list).float().unsqueeze(-1)
+
+        random_bbox_noise = (torch.rand(object_num, 3) - 0.5) * 0.1
 
         data = {'inputs': {}, 'predictions': {}, 'losses': {}, 'logs': {}}
 
-        translate = (np.random.rand(3) - 0.5) * 0.1
-        euler_angle = np.random.rand(3) * 36.0
-        scale = 1.0 + (np.random.rand(3) - 0.5) * 0.1
+        data['inputs']['object_bbox'] = (
+            bbox_array.reshape(object_num, -1, 3) +
+            random_bbox_noise.unsqueeze(1).expand(-1, 2, -1)).reshape(
+                object_num, -1)
+        data['inputs']['object_center'] = center_array + random_bbox_noise
+        data['inputs']['layout_bbox'] = layout_bbox_array
+        data['inputs']['layout_center'] = layout_center_array
+        data['inputs']['center_dist'] = center_dist
+        data['inputs']['bbox_eiou'] = bbox_eiou
 
-        trans_point_array = transPointArray(origin_point_array, translate,
-                                            euler_angle, scale)
-        data['inputs']['trans_point_array'] = torch.from_numpy(
-            trans_point_array).float()
-
-        if training:
-            rotate_matrix = getRotateMatrix(euler_angle)
-            data['inputs']['rotate_matrix'] = torch.from_numpy(
-                rotate_matrix).to(torch.float32)
+        if self.training:
+            data['inputs']['gt_object_bbox'] = bbox_array
+            data['inputs']['gt_object_center'] = center_array
+            data['inputs']['gt_layout_bbox'] = layout_bbox_array
+            data['inputs']['gt_layout_center'] = layout_center_array
         return data
 
     def __len__(self):
