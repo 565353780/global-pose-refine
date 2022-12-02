@@ -155,26 +155,28 @@ class ObjectPositionDataset(Dataset):
         object_num = bbox_array.shape[0]
         layout_num = layout_bbox_array.shape[0]
 
+        random_bbox_noise = (torch.rand(object_num, 6) - 0.5) * 1.0
+        random_center_noise = (torch.rand(object_num, 3) - 0.5) * 1.0
+
+        random_bbox_array = bbox_array + random_bbox_noise
+        random_center_array = center_array + random_center_noise
+
         center_dist_list = [
             np.linalg.norm(center2 - center1, ord=2)
-            for center1 in center_array for center2 in center_array
+            for center1 in random_center_array
+            for center2 in random_center_array
         ]
         bbox_eiou_list = [
-            IoULoss.EIoU(bbox1, bbox2) for bbox1 in bbox_array
-            for bbox2 in bbox_array
+            IoULoss.EIoU(bbox1, bbox2) for bbox1 in random_bbox_array
+            for bbox2 in random_bbox_array
         ]
         center_dist = torch.tensor(center_dist_list).float().unsqueeze(-1)
         bbox_eiou = torch.tensor(bbox_eiou_list).float().unsqueeze(-1)
 
-        random_bbox_noise = (torch.rand(object_num, 3) - 0.5) * 0.1
-
         data = {'inputs': {}, 'predictions': {}, 'losses': {}, 'logs': {}}
 
-        data['inputs']['object_bbox'] = (
-            bbox_array.reshape(object_num, -1, 3) +
-            random_bbox_noise.unsqueeze(1).expand(-1, 2, -1)).reshape(
-                object_num, -1)
-        data['inputs']['object_center'] = center_array + random_bbox_noise
+        data['inputs']['object_bbox'] = random_bbox_array
+        data['inputs']['object_center'] = random_center_array
         data['inputs']['layout_bbox'] = layout_bbox_array
         data['inputs']['layout_center'] = layout_center_array
         data['inputs']['center_dist'] = center_dist
