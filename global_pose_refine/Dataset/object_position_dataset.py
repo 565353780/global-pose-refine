@@ -2,17 +2,20 @@
 # -*- coding: utf-8 -*-
 
 import os
-
+import torch
 import numpy as np
 import open3d as o3d
-import torch
+from tqdm import tqdm
+from torch.utils.data import Dataset
+
 from auto_cad_recon.Module.dataset_manager import DatasetManager
+
 from points_shape_detect.Data.bbox import BBox
 from points_shape_detect.Loss.ious import IoULoss
 from points_shape_detect.Method.bbox import (getBBoxPointList,
                                              getOpen3DBBoxFromBBoxArray)
-from torch.utils.data import Dataset
-from tqdm import tqdm
+
+from global_pose_refine.Method.path import createFileFolder, renameFile
 
 
 class ObjectPositionDataset(Dataset):
@@ -77,40 +80,62 @@ class ObjectPositionDataset(Dataset):
 
         scene_name_list = dataset_manager.getScanNetSceneNameList()
 
+        dataset_folder_path = scan2cad_dataset_folder_path + "object_position_dataset/"
+
         print("[INFO][ObjectPositionDataset::loadScan2CAD]")
         print("\t start load scan2cad dataset...")
         for scene_name in tqdm(scene_name_list):
-            object_file_name_list = dataset_manager.getScanNetObjectFileNameList(
-                scene_name)
+            scene_folder_path = dataset_folder_path + scene_name + "/"
+            bbox_array_file_path = scene_folder_path + "bbox_array.npy"
+            center_array_file_path = scene_folder_path + "center_array.npy"
 
-            bbox_list = []
-            center_list = []
-            for object_file_name in object_file_name_list:
-                shapenet_model_dict = dataset_manager.getShapeNetModelDict(
-                    scene_name, object_file_name)
-                trans_matrix = shapenet_model_dict['trans_matrix']
-                shapenet_model_file_path = shapenet_model_dict[
-                    'shapenet_model_file_path']
+            if os.path.exists(bbox_array_file_path) and os.path.exists(
+                    center_array_file_path):
+                bbox_array = np.load(bbox_array_file_path)
+                center_array = np.load(center_array_file_path)
+            else:
+                object_file_name_list = dataset_manager.getScanNetObjectFileNameList(
+                    scene_name)
 
-                cad_mesh = o3d.io.read_triangle_mesh(shapenet_model_file_path)
-                cad_mesh.transform(trans_matrix)
-                cad_bbox = cad_mesh.get_axis_aligned_bounding_box()
+                bbox_list = []
+                center_list = []
+                for object_file_name in object_file_name_list:
+                    shapenet_model_dict = dataset_manager.getShapeNetModelDict(
+                        scene_name, object_file_name)
+                    trans_matrix = shapenet_model_dict['trans_matrix']
+                    shapenet_model_file_path = shapenet_model_dict[
+                        'shapenet_model_file_path']
 
-                cad_center = cad_bbox.get_center()
-                min_point = cad_bbox.min_bound
-                max_point = cad_bbox.max_bound
-                bbox = np.hstack((min_point, max_point))
+                    cad_mesh = o3d.io.read_triangle_mesh(
+                        shapenet_model_file_path)
+                    cad_mesh.transform(trans_matrix)
+                    cad_bbox = cad_mesh.get_axis_aligned_bounding_box()
 
-                bbox_list.append(bbox)
-                center_list.append(cad_center)
+                    cad_center = cad_bbox.get_center()
+                    min_point = cad_bbox.min_bound
+                    max_point = cad_bbox.max_bound
+                    bbox = np.hstack((min_point, max_point))
 
-            bbox_array = np.array(bbox_list)
-            center_array = np.array(center_list)
+                    bbox_list.append(bbox)
+                    center_list.append(cad_center)
+
+                bbox_array = np.array(bbox_list)
+                center_array = np.array(center_list)
+
+                tmp_bbox_array_file_path = bbox_array_file_path[:-4] + "_tmp.npy"
+                tmp_center_array_file_path = bbox_center_file_path[:-4] + "_tmp.npy"
+
+                createFileFolder(tmp_bbox_array_file_path)
+                createFileFolder(tmp_center_array_file_path)
+
+                np.save(tmp_bbox_array_file_path, bbox_array)
+                np.save(tmp_center_array_file_path, center_array)
+
+                renameFile(tmp_bbox_array_file_path, bbox_array_file_path)
+                renameFile(tmp_center_array_file_path, center_array_file_path)
 
             object_position_set = [bbox_array, center_array]
             self.object_position_set_list.append(object_position_set)
-            if len(self.object_position_set_list) > 2:
-                return True
         return True
 
     def __getitem__(self, idx, training=True):
