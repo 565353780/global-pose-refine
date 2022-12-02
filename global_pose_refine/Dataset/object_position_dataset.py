@@ -29,6 +29,8 @@ class ObjectPositionDataset(Dataset):
 
         self.loadScan2CAD()
         self.updateIdx()
+
+        self.repeat_time = 100
         return
 
     def reset(self):
@@ -84,7 +86,6 @@ class ObjectPositionDataset(Dataset):
         print("[INFO][ObjectPositionDataset::loadScan2CAD]")
         print("\t start load scan2cad dataset...")
         for scene_name in tqdm(scene_name_list):
-            scene_name = "scene0474_02"
             scene_folder_path = dataset_folder_path + scene_name + "/"
             bbox_array_file_path = scene_folder_path + "bbox_array.npy"
             center_array_file_path = scene_folder_path + "center_array.npy"
@@ -139,6 +140,8 @@ class ObjectPositionDataset(Dataset):
         return True
 
     def __getitem__(self, idx, training=True):
+        idx = int(idx / self.repeat_time)
+
         if self.training:
             idx = self.train_idx_list[idx]
         else:
@@ -200,6 +203,6 @@ class ObjectPositionDataset(Dataset):
 
     def __len__(self):
         if self.training:
-            return len(self.train_idx_list)
+            return len(self.train_idx_list) * self.repeat_time
         else:
-            return len(self.eval_idx_list)
+            return len(self.eval_idx_list) * self.repeat_time
