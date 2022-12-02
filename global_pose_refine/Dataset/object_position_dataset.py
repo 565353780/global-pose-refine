@@ -2,18 +2,17 @@
 # -*- coding: utf-8 -*-
 
 import os
-import torch
+
 import numpy as np
 import open3d as o3d
-from tqdm import tqdm
-from torch.utils.data import Dataset
-
+import torch
 from auto_cad_recon.Module.dataset_manager import DatasetManager
-
 from points_shape_detect.Data.bbox import BBox
 from points_shape_detect.Loss.ious import IoULoss
 from points_shape_detect.Method.bbox import (getBBoxPointList,
                                              getOpen3DBBoxFromBBoxArray)
+from torch.utils.data import Dataset
+from tqdm import tqdm
 
 from global_pose_refine.Method.path import createFileFolder, renameFile
 
@@ -85,6 +84,7 @@ class ObjectPositionDataset(Dataset):
         print("[INFO][ObjectPositionDataset::loadScan2CAD]")
         print("\t start load scan2cad dataset...")
         for scene_name in tqdm(scene_name_list):
+            scene_name = "scene0474_02"
             scene_folder_path = dataset_folder_path + scene_name + "/"
             bbox_array_file_path = scene_folder_path + "bbox_array.npy"
             center_array_file_path = scene_folder_path + "center_array.npy"
@@ -146,6 +146,15 @@ class ObjectPositionDataset(Dataset):
 
         object_position_set = self.object_position_set_list[idx]
         bbox_array, center_array = object_position_set
+
+        random_object_num = np.random.randint(1, bbox_array.shape[0] + 1)
+        random_idx = np.random.choice(np.arange(random_object_num),
+                                      random_object_num,
+                                      replace=False)
+
+        bbox_array = bbox_array[random_idx]
+        center_array = center_array[random_idx]
+
         bbox_array = torch.from_numpy(bbox_array).float()
         center_array = torch.from_numpy(center_array).float()
 
@@ -155,8 +164,8 @@ class ObjectPositionDataset(Dataset):
         object_num = bbox_array.shape[0]
         layout_num = layout_bbox_array.shape[0]
 
-        random_bbox_noise = (torch.rand(object_num, 6) - 0.5) * 1.0
-        random_center_noise = (torch.rand(object_num, 3) - 0.5) * 1.0
+        random_bbox_noise = (torch.rand(object_num, 6) - 0.5) * 0.5
+        random_center_noise = (torch.rand(object_num, 3) - 0.5) * 0.5
 
         random_bbox_array = bbox_array + random_bbox_noise
         random_center_array = center_array + random_center_noise

@@ -339,44 +339,68 @@ class GCNN(nn.Module):
         gt_layout_bbox = data['inputs']['layout_bbox']
         gt_layout_center = data['inputs']['layout_center']
 
-        loss_refine_object_bbox_l1 = self.l1_loss(refine_object_bbox,
-                                                  gt_object_bbox)
         loss_refine_object_center_l1 = self.l1_loss(refine_object_center,
                                                     gt_object_center)
-
-        loss_refine_layout_bbox_l1 = self.l1_loss(refine_layout_bbox,
-                                                  gt_layout_bbox)
-        loss_refine_layout_center_l1 = self.l1_loss(refine_layout_center,
-                                                    gt_layout_center)
-
+        loss_refine_object_bbox_l1 = self.l1_loss(refine_object_bbox,
+                                                  gt_object_bbox)
         loss_refine_object_bbox_eiou = torch.mean(
             IoULoss.EIoU(refine_object_bbox.reshape(-1, 6),
                          gt_object_bbox.reshape(-1, 6)))
 
-        loss_refine_layout_bbox_eiou = torch.mean(
-            IoULoss.EIoU(refine_layout_bbox.reshape(-1, 6),
-                         gt_layout_bbox.reshape(-1, 6)))
+        #  loss_refine_layout_center_l1 = self.l1_loss(refine_layout_center,
+                                                    #  gt_layout_center)
+        #  loss_refine_layout_bbox_l1 = self.l1_loss(refine_layout_bbox,
+                                                  #  gt_layout_bbox)
+        #  loss_refine_layout_bbox_eiou = torch.mean(
+            #  IoULoss.EIoU(refine_layout_bbox.reshape(-1, 6),
+                         #  gt_layout_bbox.reshape(-1, 6)))
 
-        data['losses'][
-            'loss_refine_object_bbox_l1'] = loss_refine_object_bbox_l1
         data['losses'][
             'loss_refine_object_center_l1'] = loss_refine_object_center_l1
         data['losses'][
-            'loss_refine_object_bbox_eiou'] = loss_refine_object_bbox_eiou
+            'loss_refine_object_bbox_l1'] = loss_refine_object_bbox_l1
         data['losses'][
-            'loss_refine_layout_bbox_eiou'] = loss_refine_layout_bbox_eiou
+            'loss_refine_object_bbox_eiou'] = loss_refine_object_bbox_eiou
+
+        #  data['losses'][
+        #  'loss_refine_layout_center_l1'] = loss_refine_layout_center_l1
+        #  data['losses'][
+        #  'loss_refine_layout_bbox_l1'] = loss_refine_layout_bbox_l1
+        #  data['losses'][
+        #  'loss_refine_layout_bbox_eiou'] = loss_refine_layout_bbox_eiou
+
         return data
 
     def setWeight(self, data):
         #  if self.training:
         #  return
 
-        data = setWeight(data, 'loss_refine_object_bbox_l1', 1)
-        data = setWeight(data, 'loss_refine_object_center_l1', 1)
+        data = setWeight(data,
+                         'loss_refine_object_center_l1',
+                         1e9,
+                         max_value=1000)
+        data = setWeight(data,
+                         'loss_refine_object_bbox_l1',
+                         1e9,
+                         max_value=1000)
         data = setWeight(data,
                          'loss_refine_object_bbox_eiou',
                          100,
                          max_value=100)
+
+        #  data = setWeight(data,
+        #  'loss_refine_layout_center_l1',
+        #  1e9,
+        #  max_value=10000)
+        #  data = setWeight(data,
+        #  'loss_refine_layout_bbox_l1',
+        #  1e9,
+        #  max_value=10000)
+        #  data = setWeight(data,
+        #  'loss_refine_layout_bbox_eiou',
+        #  100,
+        #  max_value=100)
+
         return data
 
     def forward(self, data):
