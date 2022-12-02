@@ -136,6 +136,7 @@ class Trainer(object):
 
             print(data['inputs'].keys())
             print(data['predictions'].keys())
+            print(data['losses'].keys())
         return True
 
     def trainStep(self, data):

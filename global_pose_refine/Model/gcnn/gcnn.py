@@ -4,9 +4,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from points_shape_detect.Loss.ious import IoULoss
 
-from global_pose_refine.Model.gcnn.gclayer_collect import GraphConvolutionLayerCollect
-from global_pose_refine.Model.gcnn.gclayer_update import GraphConvolutionLayerUpdate
+from global_pose_refine.Model.gcnn.gclayer_collect import \
+    GraphConvolutionLayerCollect
+from global_pose_refine.Model.gcnn.gclayer_update import \
+    GraphConvolutionLayerUpdate
+from global_pose_refine.Method.weight import setWeight
 
 
 class GCNN(nn.Module):
@@ -63,13 +67,13 @@ class GCNN(nn.Module):
             for i in range(self.feat_update_group)
         ])
 
-        # branch to predict the bbox_scale
+        # branch to predict the bbox
         self.fc1 = nn.Linear(self.feature_dim, self.feature_dim // 2)
-        self.fc2 = nn.Linear(self.feature_dim // 2, 3)
+        self.fc2 = nn.Linear(self.feature_dim // 2, 6)
 
         # branch to predict the orientation
-        self.fc3 = nn.Linear(self.feature_dim, self.feature_dim // 2)
-        self.fc4 = nn.Linear(self.feature_dim // 2, 6)
+        #  self.fc3 = nn.Linear(self.feature_dim, self.feature_dim // 2)
+        #  self.fc4 = nn.Linear(self.feature_dim // 2, 6)
 
         # branch to predict the centroid
         self.fc5 = nn.Linear(self.feature_dim, self.feature_dim // 2)
@@ -84,9 +88,11 @@ class GCNN(nn.Module):
                 m.weight.data.normal_(0, 0.01)
                 if hasattr(m.bias, 'data'):
                     m.bias.data.zero_()
+
+        self.l1_loss = nn.SmoothL1Loss()
         return
 
-    def getMap(self, data):
+    def buildMap(self, data):
         device = data['inputs'][self.obj_features[0]].device
 
         object_num = data['inputs'][self.obj_features[0]].shape[1]
@@ -269,17 +275,17 @@ class GCNN(nn.Module):
         update_total_feature = data['predictions']['update_total_feature']
         obj_feats_wolo = data['predictions']['obj_feats_wolo']
 
-        # branch to predict the bbox_scale
-        size = self.fc1(obj_feats_wolo)
-        size = self.relu_1(size)
-        size = self.dropout_1(size)
-        size = self.fc2(size)
+        # branch to predict the bbox
+        bbox = self.fc1(obj_feats_wolo)
+        bbox = self.relu_1(bbox)
+        bbox = self.dropout_1(bbox)
+        bbox = self.fc2(bbox)
 
         # branch to predict the orientation
-        ori = self.fc3(obj_feats_wolo)
-        ori = self.relu_1(ori)
-        ori = self.dropout_1(ori)
-        ori = self.fc4(ori)
+        #  ori = self.fc3(obj_feats_wolo)
+        #  ori = self.relu_1(ori)
+        #  ori = self.dropout_1(ori)
+        #  ori = self.fc4(ori)
 
         # branch to predict the centroid
         centroid = self.fc5(obj_feats_wolo)
@@ -289,8 +295,8 @@ class GCNN(nn.Module):
 
         obj_feats_lo = update_total_feature[layout_mask[0]]
 
-        data['predictions']['refine_bbox_scale_diff'] = size
-        data['predictions']['refine_rotation_diff'] = ori
+        data['predictions']['refine_bbox_diff'] = bbox
+        #  data['predictions']['refine_rotation_diff'] = ori
         data['predictions']['refine_center_diff'] = centroid
 
         #  if self.training:
@@ -298,16 +304,69 @@ class GCNN(nn.Module):
         return data
 
     def loss(self, data):
+        object_bbox = data['inputs']['object_bbox']
+        object_center = data['inputs']['object_center']
+        layout_bbox = data['inputs']['layout_bbox']
+        layout_center = data['inputs']['layout_center']
+        refine_bbox_diff = data['predictions']['refine_bbox_diff']
+        refine_center_diff = data['predictions']['refine_center_diff']
+        gt_object_bbox = data['inputs']['object_bbox']
+        gt_object_center = data['inputs']['object_center']
+        gt_layout_bbox = data['inputs']['layout_bbox']
+        gt_layout_center = data['inputs']['layout_center']
+
+        object_num = gt_object_bbox.shape[1]
+        layout_num = gt_layout_bbox.shape[1]
+
+        refine_object_bbox_diff = refine_bbox_diff[:, :object_num]
+        refine_object_center_diff = refine_center_diff[:, :object_num]
+        refine_layout_bbox_diff = refine_bbox_diff[:, object_num:]
+        refine_layout_center_diff = refine_center_diff[:, object_num:]
+
+        refine_object_bbox = object_bbox + refine_object_bbox_diff
+        refine_object_center = object_center + refine_object_center_diff
+        refine_layout_bbox = layout_bbox + refine_layout_bbox_diff
+        refine_layout_center = layout_center + refine_layout_center_diff
+
+        loss_refine_object_bbox_l1 = self.l1_loss(refine_object_bbox,
+                                                  gt_object_bbox)
+        loss_refine_object_center_l1 = self.l1_loss(refine_object_center,
+                                                    gt_object_center)
+
+        #  loss_refine_layout_bbox_l1 = self.l1_loss(refine_layout_bbox, gt_layout_bbox)
+        #  loss_refine_layout_center_l1 = self.l1_loss(refine_layout_center,
+        #  gt_layout_center)
+
+        loss_refine_object_bbox_eiou = torch.mean(
+            IoULoss.EIoU(refine_object_bbox.reshape(-1, 6),
+                         gt_object_bbox.reshape(-1, 6)))
+
+        #  loss_refine_layout_bbox_eiou = torch.mean(
+        #  IoULoss.EIoU(refine_layout_bbox.reshape(-1, 6),
+        #  gt_layout_bbox.reshape(-1, 6)))
+
+        data['losses'][
+            'loss_refine_object_bbox_l1'] = loss_refine_object_bbox_l1
+        data['losses'][
+            'loss_refine_object_center_l1'] = loss_refine_object_center_l1
+        data['losses'][
+            'loss_refine_object_bbox_eiou'] = loss_refine_object_bbox_eiou
         return data
 
     def setWeight(self, data):
         #  if self.training:
         #  return
 
+        data = setWeight(data, 'loss_refine_object_bbox_l1', 1)
+        data = setWeight(data, 'loss_refine_object_center_l1', 1)
+        data = setWeight(data,
+                         'loss_refine_object_bbox_eiou',
+                         100,
+                         max_value=100)
         return data
 
     def forward(self, data):
-        data = self.getMap(data)
+        data = self.buildMap(data)
 
         data = self.embedFeatures(data)
 

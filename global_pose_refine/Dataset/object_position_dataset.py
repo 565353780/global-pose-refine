@@ -11,7 +11,6 @@ from points_shape_detect.Data.bbox import BBox
 from points_shape_detect.Loss.ious import IoULoss
 from points_shape_detect.Method.bbox import (getBBoxPointList,
                                              getOpen3DBBoxFromBBoxArray)
-from scipy.spatial.transform import Rotation as R
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
