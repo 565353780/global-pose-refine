@@ -298,25 +298,17 @@ class GCNN(nn.Module):
         data['predictions']['refine_bbox_diff'] = bbox
         #  data['predictions']['refine_rotation_diff'] = ori
         data['predictions']['refine_center_diff'] = centroid
-
-        #  if self.training:
-        data = self.loss(data)
         return data
 
-    def loss(self, data):
+    def updatePose(self, data):
         object_bbox = data['inputs']['object_bbox']
         object_center = data['inputs']['object_center']
         layout_bbox = data['inputs']['layout_bbox']
         layout_center = data['inputs']['layout_center']
         refine_bbox_diff = data['predictions']['refine_bbox_diff']
         refine_center_diff = data['predictions']['refine_center_diff']
-        gt_object_bbox = data['inputs']['object_bbox']
-        gt_object_center = data['inputs']['object_center']
-        gt_layout_bbox = data['inputs']['layout_bbox']
-        gt_layout_center = data['inputs']['layout_center']
 
-        object_num = gt_object_bbox.shape[1]
-        layout_num = gt_layout_bbox.shape[1]
+        object_num = object_bbox.shape[1]
 
         refine_object_bbox_diff = refine_bbox_diff[:, :object_num]
         refine_object_center_diff = refine_center_diff[:, :object_num]
@@ -328,22 +320,42 @@ class GCNN(nn.Module):
         refine_layout_bbox = layout_bbox + refine_layout_bbox_diff
         refine_layout_center = layout_center + refine_layout_center_diff
 
+        data['predictions']['refine_object_bbox'] = refine_object_bbox
+        data['predictions']['refine_object_center'] = refine_object_center
+        data['predictions']['refine_layout_bbox'] = refine_layout_bbox
+        data['predictions']['refine_layout_center'] = refine_layout_center
+
+        #  if self.training:
+        data = self.loss(data)
+        return data
+
+    def loss(self, data):
+        refine_object_bbox = data['predictions']['refine_object_bbox']
+        refine_object_center = data['predictions']['refine_object_center']
+        refine_layout_bbox = data['predictions']['refine_layout_bbox']
+        refine_layout_center = data['predictions']['refine_layout_center']
+        gt_object_bbox = data['inputs']['object_bbox']
+        gt_object_center = data['inputs']['object_center']
+        gt_layout_bbox = data['inputs']['layout_bbox']
+        gt_layout_center = data['inputs']['layout_center']
+
         loss_refine_object_bbox_l1 = self.l1_loss(refine_object_bbox,
                                                   gt_object_bbox)
         loss_refine_object_center_l1 = self.l1_loss(refine_object_center,
                                                     gt_object_center)
 
-        #  loss_refine_layout_bbox_l1 = self.l1_loss(refine_layout_bbox, gt_layout_bbox)
-        #  loss_refine_layout_center_l1 = self.l1_loss(refine_layout_center,
-        #  gt_layout_center)
+        loss_refine_layout_bbox_l1 = self.l1_loss(refine_layout_bbox,
+                                                  gt_layout_bbox)
+        loss_refine_layout_center_l1 = self.l1_loss(refine_layout_center,
+                                                    gt_layout_center)
 
         loss_refine_object_bbox_eiou = torch.mean(
             IoULoss.EIoU(refine_object_bbox.reshape(-1, 6),
                          gt_object_bbox.reshape(-1, 6)))
 
-        #  loss_refine_layout_bbox_eiou = torch.mean(
-        #  IoULoss.EIoU(refine_layout_bbox.reshape(-1, 6),
-        #  gt_layout_bbox.reshape(-1, 6)))
+        loss_refine_layout_bbox_eiou = torch.mean(
+            IoULoss.EIoU(refine_layout_bbox.reshape(-1, 6),
+                         gt_layout_bbox.reshape(-1, 6)))
 
         data['losses'][
             'loss_refine_object_bbox_l1'] = loss_refine_object_bbox_l1
@@ -351,6 +363,8 @@ class GCNN(nn.Module):
             'loss_refine_object_center_l1'] = loss_refine_object_center_l1
         data['losses'][
             'loss_refine_object_bbox_eiou'] = loss_refine_object_bbox_eiou
+        data['losses'][
+            'loss_refine_layout_bbox_eiou'] = loss_refine_layout_bbox_eiou
         return data
 
     def setWeight(self, data):
@@ -373,6 +387,8 @@ class GCNN(nn.Module):
         data = self.updateFeature(data)
 
         data = self.decodeFeature(data)
+
+        data = self.updatePose(data)
 
         data = self.setWeight(data)
         return data

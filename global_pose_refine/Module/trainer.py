@@ -17,6 +17,7 @@ from global_pose_refine.Method.path import (createFileFolder, removeFile,
                                             renameFile)
 from global_pose_refine.Method.time import getCurrentTime
 from global_pose_refine.Model.gcnn.gcnn import GCNN
+from global_pose_refine.Method.render import renderRefineBBox
 
 
 def worker_init_fn(worker_id):
@@ -137,6 +138,7 @@ class Trainer(object):
             print(data['inputs'].keys())
             print(data['predictions'].keys())
             print(data['losses'].keys())
+            renderRefineBBox(data)
         return True
 
     def trainStep(self, data):
