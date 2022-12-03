@@ -334,10 +334,10 @@ class GCNN(nn.Module):
         refine_object_center = data['predictions']['refine_object_center']
         refine_layout_bbox = data['predictions']['refine_layout_bbox']
         refine_layout_center = data['predictions']['refine_layout_center']
-        gt_object_bbox = data['inputs']['object_bbox']
-        gt_object_center = data['inputs']['object_center']
-        gt_layout_bbox = data['inputs']['layout_bbox']
-        gt_layout_center = data['inputs']['layout_center']
+        gt_object_bbox = data['inputs']['gt_object_bbox']
+        gt_object_center = data['inputs']['gt_object_center']
+        gt_layout_bbox = data['inputs']['gt_layout_bbox']
+        gt_layout_center = data['inputs']['gt_layout_center']
 
         loss_refine_object_center_l1 = self.l1_loss(refine_object_center,
                                                     gt_object_center)
@@ -348,12 +348,12 @@ class GCNN(nn.Module):
                          gt_object_bbox.reshape(-1, 6)))
 
         #  loss_refine_layout_center_l1 = self.l1_loss(refine_layout_center,
-                                                    #  gt_layout_center)
+        #  gt_layout_center)
         #  loss_refine_layout_bbox_l1 = self.l1_loss(refine_layout_bbox,
-                                                  #  gt_layout_bbox)
+        #  gt_layout_bbox)
         #  loss_refine_layout_bbox_eiou = torch.mean(
-            #  IoULoss.EIoU(refine_layout_bbox.reshape(-1, 6),
-                         #  gt_layout_bbox.reshape(-1, 6)))
+        #  IoULoss.EIoU(refine_layout_bbox.reshape(-1, 6),
+        #  gt_layout_bbox.reshape(-1, 6)))
 
         data['losses'][
             'loss_refine_object_center_l1'] = loss_refine_object_center_l1
@@ -375,31 +375,19 @@ class GCNN(nn.Module):
         #  if self.training:
         #  return
 
-        data = setWeight(data,
-                         'loss_refine_object_center_l1',
-                         1e9,
-                         max_value=1000)
-        data = setWeight(data,
-                         'loss_refine_object_bbox_l1',
-                         1e9,
-                         max_value=1000)
+        data = setWeight(data, 'loss_refine_object_center_l1', 1e5)
+        data = setWeight(data, 'loss_refine_object_bbox_l1', 1e5)
         data = setWeight(data,
                          'loss_refine_object_bbox_eiou',
                          100,
                          max_value=100)
 
+        #  data = setWeight(data, 'loss_refine_layout_center_l1', 1e5)
+        #  data = setWeight(data, 'loss_refine_layout_bbox_l1', 1e5)
         #  data = setWeight(data,
-        #  'loss_refine_layout_center_l1',
-        #  1e9,
-        #  max_value=10000)
-        #  data = setWeight(data,
-        #  'loss_refine_layout_bbox_l1',
-        #  1e9,
-        #  max_value=10000)
-        #  data = setWeight(data,
-        #  'loss_refine_layout_bbox_eiou',
-        #  100,
-        #  max_value=100)
+                         #  'loss_refine_layout_bbox_eiou',
+                         #  100,
+                         #  max_value=100)
 
         return data
 
