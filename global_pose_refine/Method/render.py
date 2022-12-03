@@ -73,16 +73,18 @@ def renderRefineBBox(data):
         center_pcd = getPCDFromPointArray(center, [255, 0, 0])
         pcd_list.append(center_pcd)
 
-    #  bbox_list = data['predictions']['refine_object_bbox'][0].detach().cpu(
-    #  ).numpy().reshape(2, 3)
-    #  bbox = BBox.fromList(bbox_list)
-    #  open3d_bbox = getOpen3DBBoxFromBBox(bbox, [255, 0, 0])
-    #  pcd_list.append(open3d_bbox)
+    bbox_list_list = data['predictions']['refine_object_bbox'][0].detach().cpu(
+    ).numpy().reshape(-1, 2, 3)
+    for bbox_list in bbox_list_list:
+        bbox = BBox.fromList(bbox_list)
+        open3d_bbox = getOpen3DBBoxFromBBox(bbox, [0, 0, 255])
+        pcd_list.append(open3d_bbox)
 
-    #  center = data['predictions']['refine_object_center'][0].detach().cpu(
-    #  ).numpy().reshape(1, 3)
-    #  center_pcd = getPCDFromPointArray(center, [255, 0, 0])
-    #  pcd_list.append(center_pcd)
+    center_list = data['predictions']['refine_object_center'][0].detach().cpu(
+    ).numpy().reshape(-1, 1, 3)
+    for center in center_list:
+        center_pcd = getPCDFromPointArray(center, [0, 0, 255])
+        pcd_list.append(center_pcd)
 
     o3d.visualization.draw_geometries(pcd_list)
     return True
