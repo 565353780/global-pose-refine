@@ -194,11 +194,11 @@ class ObjectPositionDataset(Dataset):
         data['inputs']['center_dist'] = center_dist
         data['inputs']['bbox_eiou'] = bbox_eiou
 
-        if self.training:
-            data['inputs']['gt_object_bbox'] = bbox_array
-            data['inputs']['gt_object_center'] = center_array
-            data['inputs']['gt_layout_bbox'] = layout_bbox_array
-            data['inputs']['gt_layout_center'] = layout_center_array
+        #  if self.training:
+        data['inputs']['gt_object_bbox'] = bbox_array
+        data['inputs']['gt_object_center'] = center_array
+        data['inputs']['gt_layout_bbox'] = layout_bbox_array
+        data['inputs']['gt_layout_center'] = layout_center_array
         return data
 
     def __len__(self):
