@@ -16,7 +16,7 @@ from global_pose_refine.Model.gcnn.gclayer_update import \
 
 class GCNN(nn.Module):
 
-    def __init__(self):
+    def __init__(self, infer=False):
         super().__init__()
 
         self.floor_features = {
@@ -109,6 +109,8 @@ class GCNN(nn.Module):
                     m.bias.data.zero_()
 
         self.l1_loss = nn.SmoothL1Loss()
+
+        self.infer = infer
         return
 
     def buildMap(self, data):
@@ -348,50 +350,99 @@ class GCNN(nn.Module):
 
         object_num = trans_object_obb.shape[1]
 
-        refine_object_bbox_diff = refine_bbox_diff[:, :object_num]
-        refine_object_center_diff = refine_center_diff[:, :object_num]
-        refine_layout_bbox_diff = refine_bbox_diff[:, object_num:]
-        refine_layout_center_diff = refine_center_diff[:, object_num:]
+        object_translate_inv = refine_translate_inv[:, :object_num]
+        object_euler_angle_inv = refine_euler_angle_inv[:, :object_num]
+        object_scale_inv = refine_scale_inv[:, :object_num]
 
-        refine_object_bbox = object_bbox + refine_object_bbox_diff
-        refine_object_center = object_center + refine_object_center_diff
-        refine_layout_bbox = layout_bbox + refine_layout_bbox_diff
-        refine_layout_center = layout_center + refine_layout_center_diff
+        trans_back_object_obb_list = []
+        trans_back_object_abb_list = []
+        trans_back_object_obb_center_list = []
+        for batch_idx in range(trans_object_obb.shape[0]):
+            current_obb_list = []
+            current_abb_list = []
+            current_obb_center_list = []
+            for i in range(trans_object_obb.shape[1]):
+                trans_obb = trans_object_obb[batch_idx][i].reshape(-1, 3)
+                trans_obb_center = trans_object_obb_center[batch_idx][i]
+                translate_inv = object_translate_inv[batch_idx][i]
+                euler_angle_inv = object_euler_angle_inv[batch_idx][i]
+                scale_inv = object_scale_inv[batch_idx][i]
 
-        data['predictions']['refine_object_bbox'] = refine_object_bbox
-        data['predictions']['refine_object_center'] = refine_object_center
-        data['predictions']['refine_layout_bbox'] = refine_layout_bbox
-        data['predictions']['refine_layout_center'] = refine_layout_center
+                trans_back_object_obb = transPointArray(trans_obb,
+                                                        translate_inv,
+                                                        euler_angle_inv,
+                                                        scale_inv,
+                                                        is_inverse=True)
+                trans_back_object_abb = torch.hstack(
+                    (torch.min(trans_back_object_obb,
+                               0)[0], torch.max(trans_back_object_obb, 0)[0]))
+                trans_back_object_obb_center = trans_obb_center + translate_inv
 
-        #  if self.training:
-        data = self.loss(data)
+                trans_back_object_obb = trans_back_object_obb.reshape(1, -1)
+                trans_back_object_abb = trans_back_object_abb.unsqueeze(0)
+                trans_back_object_obb_center = trans_back_object_obb_center.unsqueeze(
+                    0)
+
+                current_obb_list.append(trans_back_object_obb)
+                current_abb_list.append(trans_back_object_abb)
+                current_obb_center_list.append(trans_back_object_obb_center)
+
+            current_obb = torch.cat(current_obb_list, 0).unsqueeze(0)
+            current_abb = torch.cat(current_abb_list, 0).unsqueeze(0)
+            current_obb_center = torch.cat(current_obb_center_list,
+                                           0).unsqueeze(0)
+
+            trans_back_object_obb_list.append(current_obb)
+            trans_back_object_abb_list.append(current_abb)
+            trans_back_object_obb_center_list.append(current_obb_center)
+
+        trans_back_object_obb = torch.cat(trans_back_object_obb_list, 0)
+        trans_back_object_abb = torch.cat(trans_back_object_abb_list, 0)
+        trans_back_object_obb_center = torch.cat(
+            trans_back_object_obb_center_list, 0)
+
+        data['predictions'][
+            'refine_object_translate_inv'] = refine_object_translate_inv
+        data['predictions'][
+            'refine_object_euler_angle_inv'] = refine_object_euler_angle_inv
+        data['predictions'][
+            'refine_object_scale_inv'] = refine_object_scale_inv
+        data['predictions']['refine_object_obb'] = trans_back_object_obb
+        data['predictions'][
+            'refine_object_obb_center'] = trans_back_object_obb_center
+        if not self.infer:
+            data = self.loss(data)
         return data
 
     def loss(self, data):
-        refine_object_bbox = data['predictions']['refine_object_bbox']
-        refine_object_center = data['predictions']['refine_object_center']
-        refine_layout_bbox = data['predictions']['refine_layout_bbox']
-        refine_layout_center = data['predictions']['refine_layout_center']
-        gt_object_bbox = data['inputs']['gt_object_bbox']
-        gt_object_center = data['inputs']['gt_object_center']
-        gt_layout_bbox = data['inputs']['gt_layout_bbox']
-        gt_layout_center = data['inputs']['gt_layout_center']
+        refine_object_translate_inv = data['predictions'][
+            'refine_object_translate_inv']
+        refine_object_euler_angle_inv = data['predictions'][
+            'refine_object_euler_angle_inv']
+        refine_object_scale_inv = data['predictions'][
+            'refine_object_scale_inv']
+        refine_object_obb = data['predictions']['refine_object_obb']
+        refine_object_obb_center = data['predictions'][
+            'refine_object_obb_center']
+        gt_object_translate_inv = data['inputs']['translate_inv']
+        gt_object_euler_angle_inv = data['inputs']['euler_angle_inv']
+        gt_object_scale_inv = data['inputs']['scale_inv']
+        gt_object_obb = data['inputs']['object_obb']
+        gt_object_obb_center = data['inputs']['object_obb_center']
 
-        loss_refine_object_center_l1 = self.l1_loss(refine_object_center,
-                                                    gt_object_center)
-        loss_refine_object_bbox_l1 = self.l1_loss(refine_object_bbox,
-                                                  gt_object_bbox)
+        loss_refine_translate_l1 = self.l1_loss(refine_object_translate_inv,
+                                                gt_object_translate_inv)
+        loss_refine_euler_angle_l1 = self.l1_loss(
+            refine_object_euler_angle_inv, gt_object_euler_angle_inv)
+        loss_refine_scale_l1 = self.l1_loss(refine_object_scale_inv,
+                                            gt_object_scale_inv)
+        loss_refine_object_obb_l1 = self.l1_loss(refine_object_obb,
+                                                 gt_object_obb)
+        loss_refine_object_obb_center_l1 = self.l1_loss(
+            refine_object_obb_center, gt_object_obb_center)
         loss_refine_object_bbox_eiou = torch.mean(
             IoULoss.EIoU(refine_object_bbox.reshape(-1, 6),
                          gt_object_bbox.reshape(-1, 6)))
-
-        #  loss_refine_layout_center_l1 = self.l1_loss(refine_layout_center,
-        #  gt_layout_center)
-        #  loss_refine_layout_bbox_l1 = self.l1_loss(refine_layout_bbox,
-        #  gt_layout_bbox)
-        #  loss_refine_layout_bbox_eiou = torch.mean(
-        #  IoULoss.EIoU(refine_layout_bbox.reshape(-1, 6),
-        #  gt_layout_bbox.reshape(-1, 6)))
 
         data['losses'][
             'loss_refine_object_center_l1'] = loss_refine_object_center_l1
@@ -410,8 +461,8 @@ class GCNN(nn.Module):
         return data
 
     def setWeight(self, data):
-        #  if self.training:
-        #  return
+        if not self.infer:
+            return data
 
         data = setWeight(data, 'loss_refine_object_center_l1', 1e5)
         data = setWeight(data, 'loss_refine_object_bbox_l1', 1e5)
