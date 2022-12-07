@@ -11,6 +11,7 @@ sys.path.append("../scan2cad-dataset-manage")
 sys.path.append("../shapenet-dataset-manage")
 sys.path.append("../points-shape-detect")
 sys.path.append("../scene-layout-detect")
+sys.path.append("../scannet-sim-manage")
 
 from global_pose_refine.Module.trainer import Trainer
 
