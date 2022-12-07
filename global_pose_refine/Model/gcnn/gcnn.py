@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from points_shape_detect.Loss.ious import IoULoss
+from points_shape_detect.Method.trans import transPointArray
 
 from global_pose_refine.Method.weight import setWeight
 from global_pose_refine.Model.gcnn.gclayer_collect import \
@@ -44,10 +45,10 @@ class GCNN(nn.Module):
         self.feat_update_step = 4
         self.feat_update_group = 1
 
-        object_features_len = sum(self.object_features.value())
-        relation_features_len = sum(self.relation_features.value())
-        floor_features_len = sum(self.floor_features.value())
-        wall_features_len = sum(self.wall_features.value())
+        object_features_len = sum(self.object_features.values())
+        relation_features_len = sum(self.relation_features.values())
+        floor_features_len = sum(self.floor_features.values())
+        wall_features_len = sum(self.wall_features.values())
 
         self.object_embedding = nn.Sequential(
             nn.Linear(object_features_len, self.feature_dim),
@@ -111,11 +112,14 @@ class GCNN(nn.Module):
         return
 
     def buildMap(self, data):
-        device = data['inputs'][self.object_features.value()[0]].device
+        device = data['inputs'][next(iter(self.object_features.keys()))].device
 
-        object_num = data['inputs'][self.object_features.value()[0]].shape[1]
-        floor_num = data['inputs'][self.floor_features.value()[0]].shape[1]
-        wall_num = data['inputs'][self.wall_features.value()[0]].shape[1]
+        object_num = data['inputs'][next(iter(
+            self.object_features.keys()))].shape[1]
+        floor_num = data['inputs'][next(iter(
+            self.floor_features.keys()))].shape[1]
+        wall_num = data['inputs'][next(iter(
+            self.wall_features.keys()))].shape[1]
         total_num = object_num + wall_num + floor_num
 
         total_map = torch.ones([total_num, total_num]).to(device)
@@ -199,12 +203,12 @@ class GCNN(nn.Module):
 
     def embedRelationFeature(self, data):
         relation_feature_list = []
-        for key in self.rel_features:
+        for key in self.relation_features.keys():
             relation_feature_list.append(data['inputs'][key])
 
         cat_relation_feature = torch.cat(relation_feature_list, -1)
 
-        embed_relation_feature = self.rel_embedding(cat_relation_feature)
+        embed_relation_feature = self.relation_embedding(cat_relation_feature)
 
         data['predictions']['cat_relation_feature'] = cat_relation_feature
         data['predictions']['embed_relation_feature'] = embed_relation_feature
@@ -257,6 +261,8 @@ class GCNN(nn.Module):
 
     def updateFeature(self, data):
         object_mask = data['predictions']['object_mask']
+        wall_mask = data['predictions']['wall_mask']
+        floor_mask = data['predictions']['floor_mask']
         total_map = data['predictions']['total_map']
         subj_pred_map = data['predictions']['subj_pred_map']
         obj_pred_map = data['predictions']['obj_pred_map']
@@ -304,51 +310,43 @@ class GCNN(nn.Module):
                                     1))
             latest_feature_idx += self.feat_update_step
 
-        obj_feats_wolo = total_feature_list[-1][object_mask[0]]
+        obj_feats_object = total_feature_list[-1][object_mask[0]]
+        obj_feats_wall = total_feature_list[-1][wall_mask[0]]
+        obj_feats_floor = total_feature_list[-1][floor_mask[0]]
 
         data['predictions']['update_total_feature'] = total_feature_list[-1]
-        data['predictions']['obj_feats_wolo'] = obj_feats_wolo
+        data['predictions']['obj_feats_object'] = obj_feats_object
+        data['predictions']['obj_feats_wall'] = obj_feats_wall
+        data['predictions']['obj_feats_floor'] = obj_feats_floor
         return data
 
     def decodeFeature(self, data):
-        layout_mask = data['predictions']['layout_mask']
-        update_total_feature = data['predictions']['update_total_feature']
-        obj_feats_wolo = data['predictions']['obj_feats_wolo']
+        obj_feats_object = data['predictions']['obj_feats_object']
+        #  obj_feats_wall = data['predictions']['obj_feats_wall']
+        #  obj_feats_floor = data['predictions']['obj_feats_floor']
 
-        # branch to predict the bbox
-        bbox = self.fc1(obj_feats_wolo)
-        bbox = self.relu_1(bbox)
-        bbox = self.dropout_1(bbox)
-        bbox = self.fc2(bbox)
+        translate_inv = self.translate_encoder(obj_feats_object)
+        euler_angle_inv = self.euler_angle_encoder(obj_feats_object)
+        scale_inv = self.scale_encoder(obj_feats_object)
 
-        # branch to predict the orientation
-        #  ori = self.fc3(obj_feats_wolo)
-        #  ori = self.relu_1(ori)
-        #  ori = self.dropout_1(ori)
-        #  ori = self.fc4(ori)
-
-        # branch to predict the centroid
-        centroid = self.fc5(obj_feats_wolo)
-        centroid = self.relu_1(centroid)
-        centroid = self.dropout_1(centroid)
-        centroid = self.fc6(centroid)
-
-        obj_feats_lo = update_total_feature[layout_mask[0]]
-
-        data['predictions']['refine_bbox_diff'] = bbox
-        #  data['predictions']['refine_rotation_diff'] = ori
-        data['predictions']['refine_center_diff'] = centroid
+        data['predictions']['refine_translate_inv'] = translate_inv
+        data['predictions']['refine_euler_angle_inv'] = euler_angle_inv
+        data['predictions']['refine_scale_inv'] = scale_inv
         return data
 
     def updatePose(self, data):
-        object_bbox = data['inputs']['object_bbox']
-        object_center = data['inputs']['object_center']
-        layout_bbox = data['inputs']['layout_bbox']
-        layout_center = data['inputs']['layout_center']
-        refine_bbox_diff = data['predictions']['refine_bbox_diff']
-        refine_center_diff = data['predictions']['refine_center_diff']
+        gt_translate_inv = data['inputs']['translate_inv']
+        gt_euler_angle_inv = data['inputs']['euler_angle_inv']
+        gt_scale_inv = data['inputs']['scale_inv']
 
-        object_num = object_bbox.shape[1]
+        trans_object_obb = data['inputs']['trans_object_obb']
+        trans_object_obb_center = data['inputs']['trans_object_obb_center']
+
+        refine_translate_inv = data['predictions']['refine_translate_inv']
+        refine_euler_angle_inv = data['predictions']['refine_euler_angle_inv']
+        refine_scale_inv = data['predictions']['refine_scale_inv']
+
+        object_num = trans_object_obb.shape[1]
 
         refine_object_bbox_diff = refine_bbox_diff[:, :object_num]
         refine_object_center_diff = refine_center_diff[:, :object_num]
