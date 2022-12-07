@@ -6,11 +6,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from points_shape_detect.Loss.ious import IoULoss
 
+from global_pose_refine.Method.weight import setWeight
 from global_pose_refine.Model.gcnn.gclayer_collect import \
     GraphConvolutionLayerCollect
 from global_pose_refine.Model.gcnn.gclayer_update import \
     GraphConvolutionLayerUpdate
-from global_pose_refine.Method.weight import setWeight
 
 
 class GCNN(nn.Module):
@@ -18,42 +18,54 @@ class GCNN(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.lo_features = ['layout_center', 'layout_bbox']
-        self.obj_features = ['object_center', 'object_bbox']
-        self.rel_features = ['center_dist', 'bbox_eiou']
+        self.floor_features = {
+            'floor_position': 3 * 4,
+            'floor_normal': 3,
+            'floor_z_value': 1,
+        }
+        self.wall_features = {
+            'wall_position': 3 * 4,
+            'wall_normal': 3,
+        }
+        self.object_features = {
+            'trans_object_obb': 3 * 8,
+            'trans_object_abb': 3 * 2,
+            'trans_object_obb_center': 3,
+            'translate': 3,
+            'euler_angle': 3,
+            'scale': 3,
+        }
+        self.relation_features = {
+            'trans_object_obb_center_dist': 1,
+            'trans_object_abb_eiou': 1,
+        }
 
         self.feature_dim = 512
         self.feat_update_step = 4
         self.feat_update_group = 1
 
-        self.feature_length = {
-            'layout_center': 3,
-            'layout_bbox': 6,
-            'object_center': 3,
-            'object_bbox': 6,
-            'center_dist': 1,
-            'bbox_eiou': 1,
-        }
+        object_features_len = sum(self.object_features.value())
+        relation_features_len = sum(self.relation_features.value())
+        floor_features_len = sum(self.floor_features.value())
+        wall_features_len = sum(self.wall_features.value())
 
-        obj_features_len = sum(
-            [self.feature_length[k] for k in self.obj_features])
-        rel_features_len = sum(
-            [self.feature_length[k] for k in self.rel_features])
-        lo_features_len = sum(
-            [self.feature_length[k] for k in self.lo_features])
-
-        self.obj_embedding = nn.Sequential(
-            nn.Linear(obj_features_len, self.feature_dim),
+        self.object_embedding = nn.Sequential(
+            nn.Linear(object_features_len, self.feature_dim),
             nn.ReLU(True),
             nn.Linear(self.feature_dim, self.feature_dim),
         )
-        self.rel_embedding = nn.Sequential(
-            nn.Linear(rel_features_len, self.feature_dim),
+        self.relation_embedding = nn.Sequential(
+            nn.Linear(relation_features_len, self.feature_dim),
             nn.ReLU(True),
             nn.Linear(self.feature_dim, self.feature_dim),
         )
-        self.lo_embedding = nn.Sequential(
-            nn.Linear(lo_features_len, self.feature_dim),
+        self.floor_embedding = nn.Sequential(
+            nn.Linear(floor_features_len, self.feature_dim),
+            nn.ReLU(True),
+            nn.Linear(self.feature_dim, self.feature_dim),
+        )
+        self.wall_embedding = nn.Sequential(
+            nn.Linear(wall_features_len, self.feature_dim),
             nn.ReLU(True),
             nn.Linear(self.feature_dim, self.feature_dim),
         )
@@ -67,20 +79,26 @@ class GCNN(nn.Module):
             for i in range(self.feat_update_group)
         ])
 
-        # branch to predict the bbox
-        self.fc1 = nn.Linear(self.feature_dim, self.feature_dim // 2)
-        self.fc2 = nn.Linear(self.feature_dim // 2, 6)
+        self.translate_encoder = nn.Sequential(
+            nn.Linear(self.feature_dim, self.feature_dim // 2),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5),
+            nn.Linear(self.feature_dim // 2, 3),
+        )
 
-        # branch to predict the orientation
-        #  self.fc3 = nn.Linear(self.feature_dim, self.feature_dim // 2)
-        #  self.fc4 = nn.Linear(self.feature_dim // 2, 6)
+        self.euler_angle_encoder = nn.Sequential(
+            nn.Linear(self.feature_dim, self.feature_dim // 2),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5),
+            nn.Linear(self.feature_dim // 2, 3),
+        )
 
-        # branch to predict the centroid
-        self.fc5 = nn.Linear(self.feature_dim, self.feature_dim // 2)
-        self.fc_centroid = nn.Linear(self.feature_dim // 2, 3)
-
-        self.relu_1 = nn.LeakyReLU(0.2)
-        self.dropout_1 = nn.Dropout(p=0.5)
+        self.scale_encoder = nn.Sequential(
+            nn.Linear(self.feature_dim, self.feature_dim // 2),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5),
+            nn.Linear(self.feature_dim // 2, 3),
+        )
 
         # initiate weights
         for m in self.modules():
@@ -93,18 +111,21 @@ class GCNN(nn.Module):
         return
 
     def buildMap(self, data):
-        device = data['inputs'][self.obj_features[0]].device
+        device = data['inputs'][self.object_features.value()[0]].device
 
-        object_num = data['inputs'][self.obj_features[0]].shape[1]
-        layout_num = data['inputs'][self.lo_features[0]].shape[1]
-        total_num = layout_num + object_num
+        object_num = data['inputs'][self.object_features.value()[0]].shape[1]
+        floor_num = data['inputs'][self.floor_features.value()[0]].shape[1]
+        wall_num = data['inputs'][self.wall_features.value()[0]].shape[1]
+        total_num = object_num + wall_num + floor_num
 
         total_map = torch.ones([total_num, total_num]).to(device)
 
         object_mask = torch.zeros(total_num, dtype=torch.bool).to(device)
-        layout_mask = torch.zeros(total_num, dtype=torch.bool).to(device)
+        wall_mask = torch.zeros(total_num, dtype=torch.bool).to(device)
+        floor_mask = torch.zeros(total_num, dtype=torch.bool).to(device)
         object_mask[:object_num] = True
-        layout_mask[object_num:] = True
+        wall_mask[object_num:object_num + wall_num] = True
+        floor_mask[object_num + wall_num:] = True
 
         object_index = torch.arange(0, total_num, dtype=torch.long).to(device)
         subject_index_grid, object_index_grid = torch.meshgrid(object_index,
@@ -130,7 +151,8 @@ class GCNN(nn.Module):
 
         data['predictions']['relation_mask'] = relation_mask
         data['predictions']['object_mask'] = object_mask
-        data['predictions']['layout_mask'] = layout_mask
+        data['predictions']['wall_mask'] = wall_mask
+        data['predictions']['floor_mask'] = floor_mask
         data['predictions']['total_map'] = total_map
         data['predictions']['subj_pred_map'] = subj_pred_map
         data['predictions']['obj_pred_map'] = obj_pred_map
@@ -138,28 +160,41 @@ class GCNN(nn.Module):
 
     def embedObjectFeature(self, data):
         object_feature_list = []
-        for key in self.obj_features:
+        for key in self.object_features.keys():
             object_feature_list.append(data['inputs'][key])
 
         cat_object_feature = torch.cat(object_feature_list, -1)
 
-        embed_object_feature = self.obj_embedding(cat_object_feature)
+        embed_object_feature = self.object_embedding(cat_object_feature)
 
         data['predictions']['cat_object_feature'] = cat_object_feature
         data['predictions']['embed_object_feature'] = embed_object_feature
         return data
 
-    def embedLayoutFeature(self, data):
-        layout_feature_list = []
-        for key in self.lo_features:
-            layout_feature_list.append(data['inputs'][key])
+    def embedWallFeature(self, data):
+        wall_feature_list = []
+        for key in self.wall_features.keys():
+            wall_feature_list.append(data['inputs'][key])
 
-        cat_layout_feature = torch.cat(layout_feature_list, -1)
+        cat_wall_feature = torch.cat(wall_feature_list, -1)
 
-        embed_layout_feature = self.lo_embedding(cat_layout_feature)
+        embed_wall_feature = self.wall_embedding(cat_wall_feature)
 
-        data['predictions']['cat_layout_feature'] = cat_layout_feature
-        data['predictions']['embed_layout_feature'] = embed_layout_feature
+        data['predictions']['cat_wall_feature'] = cat_wall_feature
+        data['predictions']['embed_wall_feature'] = embed_wall_feature
+        return data
+
+    def embedFloorFeature(self, data):
+        floor_feature_list = []
+        for key in self.floor_features.keys():
+            floor_feature_list.append(data['inputs'][key])
+
+        cat_floor_feature = torch.cat(floor_feature_list, -1)
+
+        embed_floor_feature = self.floor_embedding(cat_floor_feature)
+
+        data['predictions']['cat_floor_feature'] = cat_floor_feature
+        data['predictions']['embed_floor_feature'] = embed_floor_feature
         return data
 
     def embedRelationFeature(self, data):
@@ -177,30 +212,35 @@ class GCNN(nn.Module):
 
     def embedFeatures(self, data):
         data = self.embedObjectFeature(data)
-        data = self.embedLayoutFeature(data)
+        data = self.embedWallFeature(data)
+        data = self.embedFloorFeature(data)
         data = self.embedRelationFeature(data)
 
         relation_mask = data['predictions']['relation_mask']
         embed_object_feature = data['predictions']['embed_object_feature']
-        embed_layout_feature = data['predictions']['embed_layout_feature']
+        embed_wall_feature = data['predictions']['embed_wall_feature']
+        embed_floor_feature = data['predictions']['embed_floor_feature']
         embed_relation_feature = data['predictions']['embed_relation_feature']
 
         object_num = embed_object_feature.shape[1]
-        layout_num = embed_layout_feature.shape[1]
-        total_num = object_num + layout_num
+        wall_num = embed_wall_feature.shape[1]
+        floor_num = embed_floor_feature.shape[1]
+        total_num = object_num + wall_num + floor_num
 
         # representation of object and layout vertices
-        cat_total_feature_list = [embed_object_feature, embed_layout_feature]
+        cat_total_feature_list = [
+            embed_object_feature, embed_wall_feature, embed_floor_feature
+        ]
         embed_total_feature = torch.cat(cat_total_feature_list, 1)
 
         # representation of relation vertices connecting obj/lo vertices
-        if layout_num > 0:
+        if total_num > object_num:
             embed_relation_feature_matrix = embed_relation_feature.reshape(
                 object_num, object_num, -1)
             total_relation_feature_matrix = F.pad(
                 embed_relation_feature_matrix.permute(2, 0, 1),
-                [0, layout_num, 0, layout_num], "constant",
-                0.001).permute(1, 2, 0)
+                [0, total_num - object_num, 0, total_num - object_num],
+                "constant", 0.001).permute(1, 2, 0)
             total_relation_feature = total_relation_feature_matrix.reshape(
                 total_num**2, -1)
         else:
@@ -291,7 +331,7 @@ class GCNN(nn.Module):
         centroid = self.fc5(obj_feats_wolo)
         centroid = self.relu_1(centroid)
         centroid = self.dropout_1(centroid)
-        centroid = self.fc_centroid(centroid)
+        centroid = self.fc6(centroid)
 
         obj_feats_lo = update_total_feature[layout_mask[0]]
 
@@ -385,9 +425,9 @@ class GCNN(nn.Module):
         #  data = setWeight(data, 'loss_refine_layout_center_l1', 1e5)
         #  data = setWeight(data, 'loss_refine_layout_bbox_l1', 1e5)
         #  data = setWeight(data,
-                         #  'loss_refine_layout_bbox_eiou',
-                         #  100,
-                         #  max_value=100)
+        #  'loss_refine_layout_bbox_eiou',
+        #  100,
+        #  max_value=100)
 
         return data
 
