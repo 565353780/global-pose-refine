@@ -89,7 +89,13 @@ class ObjectPositionDataset(Dataset):
 
         print("[INFO][ObjectPositionDataset::loadScan2CAD]")
         print("\t start load scan2cad dataset...")
+        load_num = 0
         for scene_name in tqdm(scene_name_list):
+            scene_name = "scene0474_02"
+            load_num += 1
+            if load_num > 10:
+                return True
+
             scene_folder_path = dataset_folder_path + scene_name + "/"
 
             object_obb_file_path = scene_folder_path + "object_obb.npy"
@@ -138,6 +144,8 @@ class ObjectPositionDataset(Dataset):
         return True
 
     def __getitem__(self, idx, training=True):
+        height = 3
+
         idx = int(idx / self.repeat_time)
 
         if self.training:
@@ -148,7 +156,7 @@ class ObjectPositionDataset(Dataset):
         object_position_set = self.object_position_set_list[idx]
         object_obb = object_position_set[0]
 
-        random_object_num = np.random.randint(1, bbox_array.shape[0] + 1)
+        random_object_num = np.random.randint(1, object_obb.shape[0] + 1)
         random_idx = np.random.choice(np.arange(random_object_num),
                                       random_object_num,
                                       replace=False)
@@ -161,8 +169,8 @@ class ObjectPositionDataset(Dataset):
         layout_map_builder.updateLayoutMesh()
 
         floor_position = layout_map_builder.layout_map.floor_array
-        floor_normal = np.array([0.0, 0.0, 1.0])
-        floor_z_value = np.array([0.0])
+        floor_normal = np.array([[0.0, 0.0, 1.0]])
+        floor_z_value = np.array([[0.0]])
 
         wall_position_list = []
         wall_normal_list = []
@@ -187,6 +195,7 @@ class ObjectPositionDataset(Dataset):
 
         object_num = object_obb.shape[0]
         wall_num = wall_position.shape[0]
+        floor_num = 1
 
         object_abb_list = []
         object_obb_center_list = []
@@ -247,19 +256,18 @@ class ObjectPositionDataset(Dataset):
             for center1 in trans_object_obb_center
             for center2 in trans_object_obb_center
         ]
-        trans_object_abb_eiou_list = [
-            IoULoss.EIoU(bbox1, bbox2) for bbox1 in trans_object_abb
-            for bbox2 in trans_object_abb
-        ]
 
-        floor_position = torch.from_numpy(floor_position).float()
+        floor_position = torch.from_numpy(floor_position).float().reshape(
+            floor_num, -1)
         floor_normal = torch.from_numpy(floor_normal).float()
         floor_z_value = torch.from_numpy(floor_z_value).float()
 
-        wall_position = torch.from_numpy(wall_position).float()
+        wall_position = torch.from_numpy(wall_position).float().reshape(
+            wall_num, -1)
         wall_normal = torch.from_numpy(wall_normal).float()
 
-        object_obb = torch.from_numpy(object_obb).float()
+        object_obb = torch.from_numpy(object_obb).float().reshape(
+            object_num, -1)
         object_abb = torch.from_numpy(object_abb).float()
         object_obb_center = torch.from_numpy(object_obb_center).float()
 
@@ -270,10 +278,16 @@ class ObjectPositionDataset(Dataset):
         euler_angle_inv = torch.from_numpy(euler_angle_inv).float()
         scale_inv = torch.from_numpy(scale_inv).float()
 
-        trans_object_obb = torch.from_numpy(trans_object_obb).float()
+        trans_object_obb = torch.from_numpy(trans_object_obb).float().reshape(
+            object_num, -1)
         trans_object_abb = torch.from_numpy(trans_object_abb).float()
         trans_object_obb_center = torch.from_numpy(
             trans_object_obb_center).float()
+
+        trans_object_abb_eiou_list = [
+            IoULoss.EIoU(bbox1, bbox2) for bbox1 in trans_object_abb
+            for bbox2 in trans_object_abb
+        ]
 
         trans_object_obb_center_dist = torch.tensor(
             trans_object_obb_center_dist_list).float().unsqueeze(-1)
