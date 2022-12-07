@@ -6,15 +6,19 @@ import os
 import numpy as np
 import open3d as o3d
 import torch
+from auto_cad_recon.Method.bbox import getOBBFromABB
 from auto_cad_recon.Module.dataset_manager import DatasetManager
 from points_shape_detect.Data.bbox import BBox
 from points_shape_detect.Loss.ious import IoULoss
 from points_shape_detect.Method.bbox import (getBBoxPointList,
                                              getOpen3DBBoxFromBBoxArray)
+from scene_layout_detect.Module.layout_map_builder import LayoutMapBuilder
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from global_pose_refine.Method.path import createFileFolder, renameFile
+
+from points_shape_detect.Method.trans import (getInverseTrans, transPointArray)
 
 
 class ObjectPositionDataset(Dataset):
@@ -87,19 +91,16 @@ class ObjectPositionDataset(Dataset):
         print("\t start load scan2cad dataset...")
         for scene_name in tqdm(scene_name_list):
             scene_folder_path = dataset_folder_path + scene_name + "/"
-            bbox_array_file_path = scene_folder_path + "bbox_array.npy"
-            center_array_file_path = scene_folder_path + "center_array.npy"
 
-            if os.path.exists(bbox_array_file_path) and os.path.exists(
-                    center_array_file_path):
-                bbox_array = np.load(bbox_array_file_path)
-                center_array = np.load(center_array_file_path)
+            object_obb_file_path = scene_folder_path + "object_obb.npy"
+
+            if os.path.exists(object_obb_file_path):
+                object_obb = np.load(object_obb_file_path)
             else:
                 object_file_name_list = dataset_manager.getScanNetObjectFileNameList(
                     scene_name)
 
-                bbox_list = []
-                center_list = []
+                object_obb_list = []
                 for object_file_name in object_file_name_list:
                     shapenet_model_dict = dataset_manager.getShapeNetModelDict(
                         scene_name, object_file_name)
@@ -109,33 +110,30 @@ class ObjectPositionDataset(Dataset):
 
                     cad_mesh = o3d.io.read_triangle_mesh(
                         shapenet_model_file_path)
-                    cad_mesh.transform(trans_matrix)
                     cad_bbox = cad_mesh.get_axis_aligned_bounding_box()
-
-                    cad_center = cad_bbox.get_center()
                     min_point = cad_bbox.min_bound
                     max_point = cad_bbox.max_bound
-                    bbox = np.hstack((min_point, max_point))
+                    object_abb = np.hstack((min_point, max_point))
 
-                    bbox_list.append(bbox)
-                    center_list.append(cad_center)
+                    object_obb_points = getOBBFromABB(object_abb)
+                    pcd = o3d.geometry.PointCloud()
+                    pcd.points = o3d.utility.Vector3dVector(object_obb_points)
+                    pcd.transform(trans_matrix)
+                    object_obb = np.array(pcd.points)
 
-                bbox_array = np.array(bbox_list)
-                center_array = np.array(center_list)
+                    object_obb_list.append(object_obb)
 
-                tmp_bbox_array_file_path = bbox_array_file_path[:-4] + "_tmp.npy"
-                tmp_center_array_file_path = bbox_center_file_path[:-4] + "_tmp.npy"
+                object_obb = np.array(object_obb_list)
 
-                createFileFolder(tmp_bbox_array_file_path)
-                createFileFolder(tmp_center_array_file_path)
+                tmp_object_obb_file_path = object_obb_file_path[:-4] + "_tmp.npy"
 
-                np.save(tmp_bbox_array_file_path, bbox_array)
-                np.save(tmp_center_array_file_path, center_array)
+                createFileFolder(tmp_object_obb_file_path)
 
-                renameFile(tmp_bbox_array_file_path, bbox_array_file_path)
-                renameFile(tmp_center_array_file_path, center_array_file_path)
+                np.save(tmp_object_obb_file_path, object_obb)
 
-            object_position_set = [bbox_array, center_array]
+                renameFile(tmp_object_obb_file_path, object_obb_file_path)
+
+            object_position_set = [object_obb]
             self.object_position_set_list.append(object_position_set)
         return True
 
@@ -148,57 +146,167 @@ class ObjectPositionDataset(Dataset):
             idx = self.eval_idx_list[idx]
 
         object_position_set = self.object_position_set_list[idx]
-        bbox_array, center_array = object_position_set
+        object_obb = object_position_set[0]
 
         random_object_num = np.random.randint(1, bbox_array.shape[0] + 1)
         random_idx = np.random.choice(np.arange(random_object_num),
                                       random_object_num,
                                       replace=False)
 
-        bbox_array = bbox_array[random_idx]
-        center_array = center_array[random_idx]
+        object_obb = object_obb[random_idx]
 
-        bbox_array = torch.from_numpy(bbox_array).float()
-        center_array = torch.from_numpy(center_array).float()
+        layout_map_builder = LayoutMapBuilder()
+        for obb in object_obb:
+            layout_map_builder.addBound(obb)
+        layout_map_builder.updateLayoutMesh()
 
-        layout_bbox_array = torch.zeros(5, 6).float()
-        layout_center_array = torch.zeros(5, 3).float()
+        floor_position = layout_map_builder.layout_map.floor_array
+        floor_normal = np.array([0.0, 0.0, 1.0])
+        floor_z_value = np.array([0.0])
 
-        object_num = bbox_array.shape[0]
-        layout_num = layout_bbox_array.shape[0]
+        wall_position_list = []
+        wall_normal_list = []
+        for i in range(floor_position.shape[0]):
+            start_idx = i
+            end_idx = (i + 1) % floor_position.shape[0]
 
-        random_bbox_noise = (torch.rand(object_num, 6) - 0.5) * 0.5
-        random_center_noise = (torch.rand(object_num, 3) - 0.5) * 0.5
+            wall_position = np.array([
+                floor_position[start_idx], floor_position[end_idx],
+                floor_position[end_idx] + [0.0, 0.0, height],
+                floor_position[start_idx] + [0.0, 0.0, height]
+            ])
+            wall_diff = wall_position[1] - wall_position[0]
+            wall_normal = np.array([-wall_diff[1], wall_diff[0], 0])
+            wall_normal = wall_normal / np.linalg.norm(wall_normal)
 
-        random_bbox_array = bbox_array + random_bbox_noise
-        random_center_array = center_array + random_center_noise
+            wall_position_list.append(wall_position)
+            wall_normal_list.append(wall_normal)
 
-        center_dist_list = [
+        wall_position = np.array(wall_position_list)
+        wall_normal = np.array(wall_normal_list)
+
+        object_num = object_obb.shape[0]
+        wall_num = wall_position.shape[0]
+
+        object_abb_list = []
+        object_obb_center_list = []
+        translate_list = []
+        euler_angle_list = []
+        scale_list = []
+        translate_inv_list = []
+        euler_angle_inv_list = []
+        scale_inv_list = []
+        trans_object_obb_list = []
+        trans_object_abb_list = []
+        trans_object_obb_center_list = []
+        for obb in object_obb:
+            object_abb = np.hstack((np.min(obb, axis=0), np.max(obb, axis=0)))
+
+            object_obb_center = np.mean(obb, axis=0)
+
+            translate = (np.random.rand(3) - 0.5) * 1
+            euler_angle = np.array([0.0, np.random.rand() - 0.5, 0.0]) * 10.0
+            scale = 1.0 + ((np.random.rand(3) - 0.5) * 0.1)
+
+            translate_inv, euler_angle_inv, scale_inv = getInverseTrans(
+                translate, euler_angle, scale)
+
+            trans_object_obb = transPointArray(obb, translate, euler_angle,
+                                               scale)
+            trans_object_obb_center = np.mean(trans_object_obb, axis=0)
+            trans_object_abb = np.hstack(
+                (np.min(trans_object_obb,
+                        axis=0), np.max(trans_object_obb, axis=0)))
+
+            object_abb_list.append(object_abb)
+            object_obb_center_list.append(object_obb_center)
+            translate_list.append(translate)
+            euler_angle_list.append(euler_angle)
+            scale_list.append(scale)
+            translate_inv_list.append(translate_inv)
+            euler_angle_inv_list.append(euler_angle_inv)
+            scale_inv_list.append(scale_inv)
+            trans_object_obb_list.append(trans_object_obb)
+            trans_object_abb_list.append(trans_object_abb)
+            trans_object_obb_center_list.append(trans_object_obb_center)
+
+        object_abb = np.array(object_abb_list)
+        object_obb_center = np.array(object_obb_center_list)
+        translate = np.array(translate_list)
+        euler_angle = np.array(euler_angle_list)
+        scale = np.array(scale_list)
+        translate_inv = np.array(translate_inv_list)
+        euler_angle_inv = np.array(euler_angle_inv_list)
+        scale_inv = np.array(scale_inv_list)
+        trans_object_obb = np.array(trans_object_obb_list)
+        trans_object_abb = np.array(trans_object_abb_list)
+        trans_object_obb_center = np.array(trans_object_obb_center_list)
+
+        trans_object_obb_center_dist_list = [
             np.linalg.norm(center2 - center1, ord=2)
-            for center1 in random_center_array
-            for center2 in random_center_array
+            for center1 in trans_object_obb_center
+            for center2 in trans_object_obb_center
         ]
-        bbox_eiou_list = [
-            IoULoss.EIoU(bbox1, bbox2) for bbox1 in random_bbox_array
-            for bbox2 in random_bbox_array
+        trans_object_abb_eiou_list = [
+            IoULoss.EIoU(bbox1, bbox2) for bbox1 in trans_object_abb
+            for bbox2 in trans_object_abb
         ]
-        center_dist = torch.tensor(center_dist_list).float().unsqueeze(-1)
-        bbox_eiou = torch.tensor(bbox_eiou_list).float().unsqueeze(-1)
+
+        floor_position = torch.from_numpy(floor_position).float()
+        floor_normal = torch.from_numpy(floor_normal).float()
+        floor_z_value = torch.from_numpy(floor_z_value).float()
+
+        wall_position = torch.from_numpy(wall_position).float()
+        wall_normal = torch.from_numpy(wall_normal).float()
+
+        object_obb = torch.from_numpy(object_obb).float()
+        object_abb = torch.from_numpy(object_abb).float()
+        object_obb_center = torch.from_numpy(object_obb_center).float()
+
+        translate = torch.from_numpy(translate).float()
+        euler_angle = torch.from_numpy(euler_angle).float()
+        scale = torch.from_numpy(scale).float()
+        translate_inv = torch.from_numpy(translate_inv).float()
+        euler_angle_inv = torch.from_numpy(euler_angle_inv).float()
+        scale_inv = torch.from_numpy(scale_inv).float()
+
+        trans_object_obb = torch.from_numpy(trans_object_obb).float()
+        trans_object_abb = torch.from_numpy(trans_object_abb).float()
+        trans_object_obb_center = torch.from_numpy(
+            trans_object_obb_center).float()
+
+        trans_object_obb_center_dist = torch.tensor(
+            trans_object_obb_center_dist_list).float().unsqueeze(-1)
+        trans_object_abb_eiou = torch.tensor(
+            trans_object_abb_eiou_list).float().unsqueeze(-1)
 
         data = {'inputs': {}, 'predictions': {}, 'losses': {}, 'logs': {}}
 
-        data['inputs']['object_bbox'] = random_bbox_array
-        data['inputs']['object_center'] = random_center_array
-        data['inputs']['layout_bbox'] = layout_bbox_array
-        data['inputs']['layout_center'] = layout_center_array
-        data['inputs']['center_dist'] = center_dist
-        data['inputs']['bbox_eiou'] = bbox_eiou
+        data['inputs']['floor_position'] = floor_position
+        data['inputs']['floor_normal'] = floor_normal
+        data['inputs']['floor_z_value'] = floor_z_value
 
-        #  if self.training:
-        data['inputs']['gt_object_bbox'] = bbox_array
-        data['inputs']['gt_object_center'] = center_array
-        data['inputs']['gt_layout_bbox'] = layout_bbox_array
-        data['inputs']['gt_layout_center'] = layout_center_array
+        data['inputs']['wall_position'] = wall_position
+        data['inputs']['wall_normal'] = wall_normal
+
+        data['inputs']['object_obb'] = object_obb
+        data['inputs']['object_abb'] = object_abb
+        data['inputs']['object_obb_center'] = object_obb_center
+
+        data['inputs']['translate'] = translate
+        data['inputs']['euler_angle'] = euler_angle
+        data['inputs']['scale'] = scale
+        data['inputs']['translate_inv'] = translate_inv
+        data['inputs']['euler_angle_inv'] = euler_angle_inv
+        data['inputs']['scale_inv'] = scale_inv
+
+        data['inputs']['trans_object_obb'] = trans_object_obb
+        data['inputs']['trans_object_abb'] = trans_object_abb
+        data['inputs']['trans_object_obb_center'] = trans_object_obb_center
+
+        data['inputs'][
+            'trans_object_obb_center_dist'] = trans_object_obb_center_dist
+        data['inputs']['trans_object_abb_eiou'] = trans_object_abb_eiou
         return data
 
     def __len__(self):
