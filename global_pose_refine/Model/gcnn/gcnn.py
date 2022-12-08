@@ -362,11 +362,8 @@ class GCNN(nn.Module):
                 euler_angle_inv = object_euler_angle_inv[batch_idx][i]
                 scale_inv = object_scale_inv[batch_idx][i]
 
-                trans_back_object_obb = transPointArray(trans_obb,
-                                                        translate_inv,
-                                                        euler_angle_inv,
-                                                        scale_inv,
-                                                        is_inverse=True)
+                trans_back_object_obb = transPointArray(
+                    trans_obb, translate_inv, euler_angle_inv, scale_inv)
                 trans_back_object_abb = torch.hstack(
                     (torch.min(trans_back_object_obb,
                                0)[0], torch.max(trans_back_object_obb, 0)[0]))
