@@ -9,5 +9,5 @@ def demo():
 
     detector = Detector(model_file_path)
 
-    detector.detectSceneObjects(None)
+    detector.detectSceneTrans(None)
     return True
