@@ -66,7 +66,7 @@ def renderRefineBBox(data):
 
     render_list = []
 
-    floor_position = data['inputs']['floor_position'].cpu().numpy().reshape(
+    floor_position = data['inputs']['floor_position'][0].cpu().numpy().reshape(
         -1, 3)
     layout_mesh = generateLayoutMesh(floor_position)
     render_list.append(layout_mesh)
