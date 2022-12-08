@@ -337,10 +337,6 @@ class GCNN(nn.Module):
         return data
 
     def updatePose(self, data):
-        gt_translate_inv = data['inputs']['translate_inv']
-        gt_euler_angle_inv = data['inputs']['euler_angle_inv']
-        gt_scale_inv = data['inputs']['scale_inv']
-
         trans_object_obb = data['inputs']['trans_object_obb']
         trans_object_obb_center = data['inputs']['trans_object_obb_center']
 
@@ -402,12 +398,12 @@ class GCNN(nn.Module):
             trans_back_object_obb_center_list, 0)
 
         data['predictions'][
-            'refine_object_translate_inv'] = refine_object_translate_inv
+            'refine_object_translate_inv'] = object_translate_inv
         data['predictions'][
-            'refine_object_euler_angle_inv'] = refine_object_euler_angle_inv
-        data['predictions'][
-            'refine_object_scale_inv'] = refine_object_scale_inv
+            'refine_object_euler_angle_inv'] = object_euler_angle_inv
+        data['predictions']['refine_object_scale_inv'] = object_scale_inv
         data['predictions']['refine_object_obb'] = trans_back_object_obb
+        data['predictions']['refine_object_abb'] = trans_back_object_abb
         data['predictions'][
             'refine_object_obb_center'] = trans_back_object_obb_center
         if not self.infer:
@@ -422,62 +418,59 @@ class GCNN(nn.Module):
         refine_object_scale_inv = data['predictions'][
             'refine_object_scale_inv']
         refine_object_obb = data['predictions']['refine_object_obb']
+        refine_object_abb = data['predictions']['refine_object_abb']
         refine_object_obb_center = data['predictions'][
             'refine_object_obb_center']
         gt_object_translate_inv = data['inputs']['translate_inv']
         gt_object_euler_angle_inv = data['inputs']['euler_angle_inv']
         gt_object_scale_inv = data['inputs']['scale_inv']
         gt_object_obb = data['inputs']['object_obb']
+        gt_object_abb = data['inputs']['object_abb']
         gt_object_obb_center = data['inputs']['object_obb_center']
 
-        loss_refine_translate_l1 = self.l1_loss(refine_object_translate_inv,
-                                                gt_object_translate_inv)
-        loss_refine_euler_angle_l1 = self.l1_loss(
+        loss_refine_translate_inv_l1 = self.l1_loss(
+            refine_object_translate_inv, gt_object_translate_inv)
+        loss_refine_euler_angle_inv_l1 = self.l1_loss(
             refine_object_euler_angle_inv, gt_object_euler_angle_inv)
-        loss_refine_scale_l1 = self.l1_loss(refine_object_scale_inv,
-                                            gt_object_scale_inv)
+        loss_refine_scale_inv_l1 = self.l1_loss(refine_object_scale_inv,
+                                                gt_object_scale_inv)
         loss_refine_object_obb_l1 = self.l1_loss(refine_object_obb,
                                                  gt_object_obb)
+        loss_refine_object_abb_l1 = self.l1_loss(refine_object_abb,
+                                                 gt_object_abb)
         loss_refine_object_obb_center_l1 = self.l1_loss(
             refine_object_obb_center, gt_object_obb_center)
-        loss_refine_object_bbox_eiou = torch.mean(
-            IoULoss.EIoU(refine_object_bbox.reshape(-1, 6),
-                         gt_object_bbox.reshape(-1, 6)))
+        loss_refine_object_abb_eiou = torch.mean(
+            IoULoss.EIoU(refine_object_abb.reshape(-1, 6),
+                         gt_object_abb.reshape(-1, 6)))
 
         data['losses'][
-            'loss_refine_object_center_l1'] = loss_refine_object_center_l1
+            'loss_refine_translate_inv_l1'] = loss_refine_translate_inv_l1
         data['losses'][
-            'loss_refine_object_bbox_l1'] = loss_refine_object_bbox_l1
+            'loss_refine_euler_angle_inv_l1'] = loss_refine_euler_angle_inv_l1
+        data['losses']['loss_refine_scale_inv_l1'] = loss_refine_scale_inv_l1
+        data['losses']['loss_refine_object_obb_l1'] = loss_refine_object_obb_l1
+        data['losses']['loss_refine_object_abb_l1'] = loss_refine_object_abb_l1
         data['losses'][
-            'loss_refine_object_bbox_eiou'] = loss_refine_object_bbox_eiou
-
-        #  data['losses'][
-        #  'loss_refine_layout_center_l1'] = loss_refine_layout_center_l1
-        #  data['losses'][
-        #  'loss_refine_layout_bbox_l1'] = loss_refine_layout_bbox_l1
-        #  data['losses'][
-        #  'loss_refine_layout_bbox_eiou'] = loss_refine_layout_bbox_eiou
-
+            'loss_refine_object_obb_center_l1'] = loss_refine_object_obb_center_l1
+        data['losses'][
+            'loss_refine_object_abb_eiou'] = loss_refine_object_abb_eiou
         return data
 
     def setWeight(self, data):
         if not self.infer:
             return data
 
-        data = setWeight(data, 'loss_refine_object_center_l1', 1e5)
-        data = setWeight(data, 'loss_refine_object_bbox_l1', 1e5)
+        data = setWeight(data, 'loss_refine_translate_inv_l1', 1e5)
+        data = setWeight(data, 'loss_refine_euler_angle_inv_l1', 1e5)
+        data = setWeight(data, 'loss_refine_scale_inv_l1', 1e5)
+        data = setWeight(data, 'loss_refine_object_obb_l1', 1e5)
+        data = setWeight(data, 'loss_refine_object_abb_l1', 1e5)
+        data = setWeight(data, 'loss_refine_object_obb_center_l1', 1e5)
         data = setWeight(data,
-                         'loss_refine_object_bbox_eiou',
+                         'loss_refine_object_abb_eiou',
                          100,
                          max_value=100)
-
-        #  data = setWeight(data, 'loss_refine_layout_center_l1', 1e5)
-        #  data = setWeight(data, 'loss_refine_layout_bbox_l1', 1e5)
-        #  data = setWeight(data,
-        #  'loss_refine_layout_bbox_eiou',
-        #  100,
-        #  max_value=100)
-
         return data
 
     def forward(self, data):
