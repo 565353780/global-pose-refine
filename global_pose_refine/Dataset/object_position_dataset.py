@@ -212,11 +212,8 @@ class ObjectPositionDataset(Dataset):
             translate_inv, euler_angle_inv, scale_inv = getInverseTrans(
                 translate, euler_angle, scale)
 
-            trans_object_obb = transPointArray(obb,
-                                               translate,
-                                               euler_angle,
-                                               scale,
-                                               is_inverse=True)
+            trans_object_obb = transPointArray(obb, translate, euler_angle,
+                                               scale)
             trans_object_obb_center = np.mean(trans_object_obb, axis=0)
             trans_object_abb = np.hstack(
                 (np.min(trans_object_obb,
