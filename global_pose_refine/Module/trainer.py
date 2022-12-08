@@ -28,8 +28,8 @@ class Trainer(object):
 
     def __init__(self):
         self.batch_size = 1
-        self.lr = 1e-4
-        self.weight_decay = 1e-4
+        self.lr = 1e-5
+        self.weight_decay = 1e-5
         self.decay_step = 21
         self.lr_decay = 0.76
         self.lowest_decay = 0.02
