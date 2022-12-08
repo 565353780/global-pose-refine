@@ -89,12 +89,8 @@ class ObjectPositionDataset(Dataset):
 
         print("[INFO][ObjectPositionDataset::loadScan2CAD]")
         print("\t start load scan2cad dataset...")
-        load_num = 0
         for scene_name in tqdm(scene_name_list):
             scene_name = "scene0474_02"
-            load_num += 1
-            if load_num > 10:
-                return True
 
             scene_folder_path = dataset_folder_path + scene_name + "/"
 
