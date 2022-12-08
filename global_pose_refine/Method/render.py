@@ -4,6 +4,10 @@
 import numpy as np
 import open3d as o3d
 
+from auto_cad_recon.Method.bbox import getOBBFromABB
+
+from scene_layout_detect.Method.mesh import generateLayoutMesh
+
 from points_shape_detect.Data.bbox import BBox
 from points_shape_detect.Method.bbox import (getOpen3DBBox,
                                              getOpen3DBBoxFromBBox)
@@ -18,6 +22,21 @@ def getPCDFromPointArray(point_array, color=None):
                           dtype=float) / 255.0
         pcd.colors = o3d.utility.Vector3dVector(colors)
     return pcd
+
+
+def getOBBPCD(point_array, color=None):
+    lines = [[0, 1], [1, 3], [3, 2], [2, 0], [4, 5], [5, 7], [7, 6], [6, 4],
+             [0, 4], [1, 5], [2, 6], [3, 7]]
+
+    line_set = o3d.geometry.LineSet(
+        points=o3d.utility.Vector3dVector(point_array),
+        lines=o3d.utility.Vector2iVector(lines))
+
+    if color is not None:
+        colors = np.array([color
+                           for i in range(len(lines))], dtype=float) / 255.0
+        line_set.colors = o3d.utility.Vector3dVector(colors)
+    return line_set
 
 
 def renderPointArray(point_array):
@@ -40,51 +59,63 @@ def renderPointArrayList(point_array_list):
 
 
 def renderRefineBBox(data):
-    assert 'object_bbox' in data['inputs'].keys()
-    assert 'object_center' in data['inputs'].keys()
-    assert 'refine_object_bbox' in data['predictions'].keys()
-    assert 'refine_object_center' in data['predictions'].keys()
+    assert 'floor_position' in data['inputs'].keys()
+    assert 'object_obb' in data['inputs'].keys()
+    assert 'object_abb' in data['inputs'].keys()
+    assert 'object_obb_center' in data['inputs'].keys()
+    assert 'trans_object_obb' in data['inputs'].keys()
+    assert 'trans_object_abb' in data['inputs'].keys()
+    assert 'trans_object_obb_center' in data['inputs'].keys()
 
-    pcd_list = []
+    #  assert 'refine_object_obb' in data['predictions'].keys()
+    #  assert 'refine_object_abb' in data['predictions'].keys()
+    #  assert 'refine_object_obb_center' in data['predictions'].keys()
 
-    gt_bbox_list_list = data['inputs']['gt_object_bbox'][0].cpu().numpy(
-    ).reshape(-1, 2, 3)
-    for gt_bbox_list in gt_bbox_list_list:
-        gt_bbox = BBox.fromList(gt_bbox_list)
-        open3d_gt_bbox = getOpen3DBBoxFromBBox(gt_bbox, [0, 255, 0])
-        pcd_list.append(open3d_gt_bbox)
+    render_list = []
 
-    gt_center_list = data['inputs']['gt_object_center'][0].cpu().numpy(
+    floor_position = data['inputs']['floor_position'].cpu().numpy().reshape(
+        -1, 3)
+    layout_mesh = generateLayoutMesh(floor_position)
+    render_list.append(layout_mesh)
+
+    gt_obb_list = data['inputs']['object_obb'][0].cpu().numpy().reshape(
+        -1, 8, 3)
+    for gt_obb in gt_obb_list:
+        pcd = getOBBPCD(gt_obb, [0, 255, 0])
+        render_list.append(pcd)
+
+    gt_abb_list = data['inputs']['object_abb'][0].cpu().numpy().reshape(-1, 6)
+    for gt_abb in gt_abb_list:
+        obb = getOBBFromABB(gt_abb)
+        pcd = getOBBPCD(obb, [0, 255, 0])
+        pcd.translate([0, 0, 3])
+        render_list.append(pcd)
+
+    gt_obb_center_list = data['inputs']['object_obb_center'][0].cpu().numpy(
     ).reshape(-1, 1, 3)
-    for gt_center in gt_center_list:
-        gt_center_pcd = getPCDFromPointArray(gt_center, [0, 255, 0])
-        pcd_list.append(gt_center_pcd)
+    for gt_obb_center in gt_obb_center_list:
+        pcd = getPCDFromPointArray(gt_obb_center, [0, 255, 0])
+        render_list.append(pcd)
 
-    bbox_list_list = data['inputs']['object_bbox'][0].cpu().numpy().reshape(
-        -1, 2, 3)
-    for bbox_list in bbox_list_list:
-        bbox = BBox.fromList(bbox_list)
-        open3d_bbox = getOpen3DBBoxFromBBox(bbox, [255, 0, 0])
-        pcd_list.append(open3d_bbox)
+    trans_obb_list = data['inputs']['trans_object_obb'][0].cpu().numpy(
+    ).reshape(-1, 8, 3)
+    for trans_obb in trans_obb_list:
+        pcd = getOBBPCD(trans_obb, [0, 0, 255])
+        render_list.append(pcd)
 
-    center_list = data['inputs']['object_center'][0].cpu().numpy().reshape(
-        -1, 1, 3)
-    for center in center_list:
-        center_pcd = getPCDFromPointArray(center, [255, 0, 0])
-        pcd_list.append(center_pcd)
+    trans_abb_list = data['inputs']['trans_object_abb'][0].cpu().numpy(
+    ).reshape(-1, 6)
+    for trans_abb in trans_abb_list:
+        obb = getOBBFromABB(trans_abb)
+        pcd = getOBBPCD(obb, [0, 0, 255])
+        pcd.translate([0, 0, 3])
+        render_list.append(pcd)
 
-    bbox_list_list = data['predictions']['refine_object_bbox'][0].detach().cpu(
-    ).numpy().reshape(-1, 2, 3)
-    for bbox_list in bbox_list_list:
-        bbox = BBox.fromList(bbox_list)
-        open3d_bbox = getOpen3DBBoxFromBBox(bbox, [0, 0, 255])
-        pcd_list.append(open3d_bbox)
-
-    center_list = data['predictions']['refine_object_center'][0].detach().cpu(
+    trans_obb_center_list = data['inputs']['trans_object_obb_center'][0].cpu(
     ).numpy().reshape(-1, 1, 3)
-    for center in center_list:
-        center_pcd = getPCDFromPointArray(center, [0, 0, 255])
-        pcd_list.append(center_pcd)
+    for trans_obb_center in trans_obb_center_list:
+        pcd = getPCDFromPointArray(trans_obb_center, [0, 0, 255])
+        render_list.append(pcd)
 
-    o3d.visualization.draw_geometries(pcd_list)
+    o3d.visualization.draw_geometries(render_list)
     return True
