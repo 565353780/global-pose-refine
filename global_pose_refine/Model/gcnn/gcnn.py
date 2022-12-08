@@ -20,17 +20,17 @@ class GCNN(nn.Module):
         super().__init__()
 
         self.floor_features = {
-            'floor_position': 3 * 4,
+            'floor_position': 4 * 3,
             'floor_normal': 3,
             'floor_z_value': 1,
         }
         self.wall_features = {
-            'wall_position': 3 * 4,
+            'wall_position': 4 * 3,
             'wall_normal': 3,
         }
         self.object_features = {
-            'trans_object_obb': 3 * 8,
-            'trans_object_abb': 3 * 2,
+            'trans_object_obb': 8 * 3,
+            'trans_object_abb': 2 * 3,
             'trans_object_obb_center': 3,
             'translate': 3,
             'euler_angle': 3,
