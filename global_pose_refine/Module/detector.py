@@ -32,7 +32,7 @@ class Detector(object):
         self.model.load_state_dict(model_dict['model'])
         return True
 
-    def detectSceneObjects(self, data):
+    def detectSceneTrans(self, data):
         self.model.eval()
 
         toCuda(data)
@@ -62,6 +62,11 @@ class Detector(object):
             'trans_object_abb'].reshape(1, object_num, -1)
         data['inputs']['trans_object_obb_center'] = data['inputs'][
             'trans_object_obb_center'].reshape(1, object_num, -1)
+
+        data['inputs']['trans_object_obb_center_dist'] = data['inputs'][
+            'trans_object_obb_center_dist'].reshape(1, -1, 1)
+        data['inputs']['trans_object_abb_eiou'] = data['inputs'][
+            'trans_object_abb_eiou'].reshape(1, -1, 1)
 
         data = self.model(data)
         return data
