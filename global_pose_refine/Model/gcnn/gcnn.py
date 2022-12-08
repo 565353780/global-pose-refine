@@ -458,19 +458,16 @@ class GCNN(nn.Module):
         return data
 
     def setWeight(self, data):
-        if not self.infer:
+        if self.infer:
             return data
 
-        data = setWeight(data, 'loss_refine_translate_inv_l1', 1e5)
-        data = setWeight(data, 'loss_refine_euler_angle_inv_l1', 1e5)
-        data = setWeight(data, 'loss_refine_scale_inv_l1', 1e5)
-        data = setWeight(data, 'loss_refine_object_obb_l1', 1e5)
-        data = setWeight(data, 'loss_refine_object_abb_l1', 1e5)
-        data = setWeight(data, 'loss_refine_object_obb_center_l1', 1e5)
-        data = setWeight(data,
-                         'loss_refine_object_abb_eiou',
-                         100,
-                         max_value=100)
+        data = setWeight(data, 'loss_refine_translate_inv_l1', 1000)
+        data = setWeight(data, 'loss_refine_euler_angle_inv_l1', 1000)
+        data = setWeight(data, 'loss_refine_scale_inv_l1', 1000)
+        data = setWeight(data, 'loss_refine_object_obb_l1', 1000)
+        data = setWeight(data, 'loss_refine_object_abb_l1', 1000)
+        data = setWeight(data, 'loss_refine_object_obb_center_l1', 1000)
+        data = setWeight(data, 'loss_refine_object_abb_eiou', 1, max_value=1)
         return data
 
     def forward(self, data):
