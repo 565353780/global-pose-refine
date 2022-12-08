@@ -272,6 +272,7 @@ class GCNN(nn.Module):
         mask_total_relation_feature = data['predictions'][
             'mask_total_relation_feature']
 
+        # FIXME: now can only training on batch_size = 0
         total_feature_list = [embed_total_feature[0]]
         relation_feature_list = [mask_total_relation_feature]
 
