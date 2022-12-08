@@ -9,13 +9,14 @@ import open3d as o3d
 import torch
 from tqdm import tqdm
 
+from global_pose_refine.Method.device import toCuda
 from global_pose_refine.Model.gcnn.gcnn import GCNN
 
 
 class Detector(object):
 
     def __init__(self, model_file_path=None):
-        self.model = GCNN().cuda()
+        self.model = GCNN(True).cuda()
 
         if model_file_path is not None:
             self.loadModel(model_file_path)
@@ -34,12 +35,33 @@ class Detector(object):
     def detectSceneObjects(self, data):
         self.model.eval()
 
-        data['predictions']['layout_position'] = torch.randn(1, 3, 3).cuda()
-        data['predictions']['object_position'] = torch.randn(1, 8, 3).cuda()
-        data['predictions']['object_bbox'] = torch.randn(1, 8, 3).cuda()
-        data['predictions']['position_dist'] = torch.randn(1, 8 * 8, 1).cuda()
-        data['predictions']['bbox_eiou'] = torch.randn(1, 8 * 8, 1).cuda()
-        data['predictions']['bbox_diff'] = torch.randn(1, 8 * 8, 6).cuda()
+        toCuda(data)
+
+        wall_position = data['inputs']['wall_position']
+        trans_object_obb = data['inputs']['trans_object_obb']
+
+        wall_num = wall_position.shape[0]
+        floor_num = 1
+        object_num = trans_object_obb.shape[0]
+
+        data['inputs']['floor_position'] = data['inputs'][
+            'floor_position'].reshape(1, floor_num, -1)
+        data['inputs']['floor_normal'] = data['inputs'][
+            'floor_normal'].reshape(1, floor_num, -1)
+        data['inputs']['floor_z_value'] = data['inputs'][
+            'floor_z_value'].reshape(1, floor_num, -1)
+
+        data['inputs']['wall_position'] = data['inputs'][
+            'wall_position'].reshape(1, wall_num, -1)
+        data['inputs']['wall_normal'] = data['inputs']['wall_normal'].reshape(
+            1, wall_num, -1)
+
+        data['inputs']['trans_object_obb'] = data['inputs'][
+            'trans_object_obb'].reshape(1, object_num, -1)
+        data['inputs']['trans_object_abb'] = data['inputs'][
+            'trans_object_abb'].reshape(1, object_num, -1)
+        data['inputs']['trans_object_obb_center'] = data['inputs'][
+            'trans_object_obb_center'].reshape(1, object_num, -1)
 
         data = self.model(data)
         return data
