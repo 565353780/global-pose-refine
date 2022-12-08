@@ -299,17 +299,6 @@ class ObjectPositionDataset(Dataset):
         data['inputs']['wall_position'] = wall_position
         data['inputs']['wall_normal'] = wall_normal
 
-        data['inputs']['object_obb'] = object_obb
-        data['inputs']['object_abb'] = object_abb
-        data['inputs']['object_obb_center'] = object_obb_center
-
-        data['inputs']['translate'] = translate
-        data['inputs']['euler_angle'] = euler_angle
-        data['inputs']['scale'] = scale
-        data['inputs']['translate_inv'] = translate_inv
-        data['inputs']['euler_angle_inv'] = euler_angle_inv
-        data['inputs']['scale_inv'] = scale_inv
-
         data['inputs']['trans_object_obb'] = trans_object_obb
         data['inputs']['trans_object_abb'] = trans_object_abb
         data['inputs']['trans_object_obb_center'] = trans_object_obb_center
@@ -317,6 +306,14 @@ class ObjectPositionDataset(Dataset):
         data['inputs'][
             'trans_object_obb_center_dist'] = trans_object_obb_center_dist
         data['inputs']['trans_object_abb_eiou'] = trans_object_abb_eiou
+
+        data['inputs']['object_obb'] = object_obb
+        data['inputs']['object_abb'] = object_abb
+        data['inputs']['object_obb_center'] = object_obb_center
+
+        data['inputs']['translate_inv'] = translate_inv
+        data['inputs']['euler_angle_inv'] = euler_angle_inv
+        data['inputs']['scale_inv'] = scale_inv
         return data
 
     def getBatchItem(self, idx):
