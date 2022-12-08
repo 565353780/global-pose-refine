@@ -32,9 +32,6 @@ class GCNN(nn.Module):
             'trans_object_obb': 8 * 3,
             'trans_object_abb': 2 * 3,
             'trans_object_obb_center': 3,
-            'translate': 3,
-            'euler_angle': 3,
-            'scale': 3,
         }
         self.relation_features = {
             'trans_object_obb_center_dist': 1,
