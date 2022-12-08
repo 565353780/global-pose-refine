@@ -12,13 +12,12 @@ from points_shape_detect.Data.bbox import BBox
 from points_shape_detect.Loss.ious import IoULoss
 from points_shape_detect.Method.bbox import (getBBoxPointList,
                                              getOpen3DBBoxFromBBoxArray)
+from points_shape_detect.Method.trans import getInverseTrans, transPointArray
 from scene_layout_detect.Module.layout_map_builder import LayoutMapBuilder
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from global_pose_refine.Method.path import createFileFolder, renameFile
-
-from points_shape_detect.Method.trans import (getInverseTrans, transPointArray)
 
 
 class ObjectPositionDataset(Dataset):
@@ -139,7 +138,7 @@ class ObjectPositionDataset(Dataset):
             self.object_position_set_list.append(object_position_set)
         return True
 
-    def __getitem__(self, idx, training=True):
+    def getItem(self, idx, random_object_num=None):
         height = 3
 
         idx = int(idx / self.repeat_time)
@@ -152,7 +151,8 @@ class ObjectPositionDataset(Dataset):
         object_position_set = self.object_position_set_list[idx]
         object_obb = object_position_set[0]
 
-        random_object_num = np.random.randint(1, object_obb.shape[0] + 1)
+        if random_object_num is None:
+            random_object_num = np.random.randint(1, object_obb.shape[0] + 1)
         random_idx = np.random.choice(np.arange(random_object_num),
                                       random_object_num,
                                       replace=False)
@@ -318,6 +318,46 @@ class ObjectPositionDataset(Dataset):
             'trans_object_obb_center_dist'] = trans_object_obb_center_dist
         data['inputs']['trans_object_abb_eiou'] = trans_object_abb_eiou
         return data
+
+    def getBatchItem(self, idx):
+        batch_size = 10
+
+        height = 3
+
+        idx = int(idx / self.repeat_time)
+
+        if self.training:
+            idx = self.train_idx_list[idx]
+        else:
+            idx = self.eval_idx_list[idx]
+
+        object_position_set = self.object_position_set_list[idx]
+        object_obb = object_position_set[0]
+
+        random_object_num = np.random.randint(1, object_obb.shape[0] + 1)
+
+        data_list = []
+        for i in range(batch_size):
+            data = self.getItem(idx, random_object_num)
+            data_list.append(data)
+
+        batch_data = {
+            'inputs': {},
+            'predictions': {},
+            'losses': {},
+            'logs': {}
+        }
+
+        for key in data_list[0]['inputs'].keys():
+            value_list = []
+            for i in range(batch_size):
+                value_list.append(data_list[i]['inputs'][key].unsqueeze(0))
+            batch_value = torch.cat(value_list, 0).cuda()
+            batch_data['inputs'][key] = batch_value
+        return batch_data
+
+    def __getitem__(self, idx):
+        return self.getItem(idx)
 
     def __len__(self):
         if self.training:
