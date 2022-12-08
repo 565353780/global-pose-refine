@@ -18,7 +18,6 @@ from global_pose_refine.Module.trainer import Trainer
 
 def demo():
     model_file_path = "./output/pretrained_gcnn/model_best.pth"
-    model_file_path = ""
     resume_model_only = True
     print_progress = True
 
