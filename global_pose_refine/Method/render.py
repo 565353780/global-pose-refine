@@ -3,14 +3,11 @@
 
 import numpy as np
 import open3d as o3d
-
 from auto_cad_recon.Method.bbox import getOBBFromABB
-
-from scene_layout_detect.Method.mesh import generateLayoutMesh
-
 from points_shape_detect.Data.bbox import BBox
 from points_shape_detect.Method.bbox import (getOpen3DBBox,
                                              getOpen3DBBoxFromBBox)
+from scene_layout_detect.Method.mesh import generateLayoutMesh
 
 
 def getPCDFromPointArray(point_array, color=None):
@@ -67,10 +64,6 @@ def renderRefineBBox(data):
     assert 'trans_object_abb' in data['inputs'].keys()
     assert 'trans_object_obb_center' in data['inputs'].keys()
 
-    #  assert 'refine_object_obb' in data['predictions'].keys()
-    #  assert 'refine_object_abb' in data['predictions'].keys()
-    #  assert 'refine_object_obb_center' in data['predictions'].keys()
-
     render_list = []
 
     floor_position = data['inputs']['floor_position'].cpu().numpy().reshape(
@@ -116,6 +109,30 @@ def renderRefineBBox(data):
     for trans_obb_center in trans_obb_center_list:
         pcd = getPCDFromPointArray(trans_obb_center, [0, 0, 255])
         render_list.append(pcd)
+
+    if 'refine_object_obb' in data['predictions'].keys():
+        refine_obb_list = data['predictions']['refine_object_obb'][0].detach(
+        ).cpu().numpy().reshape(-1, 8, 3)
+        for refine_obb in refine_obb_list:
+            pcd = getOBBPCD(refine_obb, [255, 0, 0])
+            render_list.append(pcd)
+
+    if 'refine_object_abb' in data['predictions'].keys():
+        refine_abb_list = data['predictions']['refine_object_abb'][0].detach(
+        ).cpu().numpy().reshape(-1, 6)
+        for refine_abb in refine_abb_list:
+            obb = getOBBFromABB(refine_abb)
+            pcd = getOBBPCD(obb, [255, 0, 0])
+            pcd.translate([0, 0, 3])
+            render_list.append(pcd)
+
+    if 'refine_object_obb_center' in data['predictions'].keys():
+        refine_obb_center_list = data['predictions'][
+            'refine_object_obb_center'][0].detach().cpu().numpy().reshape(
+                -1, 1, 3)
+        for refine_obb_center in refine_obb_center_list:
+            pcd = getPCDFromPointArray(refine_obb_center, [255, 0, 0])
+            render_list.append(pcd)
 
     o3d.visualization.draw_geometries(render_list)
     return True
