@@ -132,6 +132,7 @@ class Trainer(object):
         for data in tqdm(test_dataloader):
             toCuda(data)
             data = self.preProcessData(data)
+            renderRefineBBox(data)
 
             data = self.model(data)
 
