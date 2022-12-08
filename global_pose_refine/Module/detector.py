@@ -31,10 +31,8 @@ class Detector(object):
         self.model.load_state_dict(model_dict['model'])
         return True
 
-    def detectSceneObjects(self, scene_object):
+    def detectSceneObjects(self, data):
         self.model.eval()
-
-        data = {'inputs': {}, 'predictions': {}, 'losses': {}, 'logs': {}}
 
         data['predictions']['layout_position'] = torch.randn(1, 3, 3).cuda()
         data['predictions']['object_position'] = torch.randn(1, 8, 3).cuda()
