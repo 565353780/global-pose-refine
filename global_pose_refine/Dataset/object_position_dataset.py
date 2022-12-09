@@ -214,9 +214,9 @@ class ObjectPositionDataset(Dataset):
 
             object_obb_center = np.mean(obb, axis=0)
 
-            translate = (np.random.rand(3) - 0.5) * 1
-            euler_angle = np.array([0.0, np.random.rand() - 0.5, 0.0]) * 45.0
-            scale = 1.0 + ((np.random.rand(3) - 0.5) * 0.1)
+            translate = (np.random.rand(3) - 0.5) * 0.1
+            euler_angle = np.array([0.0, np.random.rand() - 0.5, 0.0]) * 360.0
+            scale = 1.0 + ((np.random.rand(3) - 0.5) * 0.2)
 
             translate_inv, euler_angle_inv, scale_inv = getInverseTrans(
                 translate, euler_angle, scale)
