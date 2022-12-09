@@ -108,11 +108,20 @@ class ObjectPositionDataset(Dataset):
                     shapenet_model_dict = dataset_manager.getShapeNetModelDict(
                         scene_name, object_file_name)
                     trans_matrix = shapenet_model_dict['trans_matrix']
+                    shapenet_model_file_path = shapenet_model_dict[
+                        'shapenet_model_file_path']
 
-                    noc_abb = np.array([-0.5, -0.5, -0.5, 0.5, 0.5, 0.5],
-                                       dtype=float)
+                    #  object_abb = np.array([-0.5, -0.5, -0.5, 0.5, 0.5, 0.5],
+                    #  dtype=float)
 
-                    object_obb_points = getOBBFromABB(noc_abb)
+                    cad_mesh = o3d.io.read_triangle_mesh(
+                        shapenet_model_file_path)
+                    cad_bbox = cad_mesh.get_axis_aligned_bounding_box()
+                    min_point = cad_bbox.min_bound
+                    max_point = cad_bbox.max_bound
+                    object_abb = np.hstack((min_point, max_point))
+
+                    object_obb_points = getOBBFromABB(object_abb)
                     pcd = o3d.geometry.PointCloud()
                     pcd.points = o3d.utility.Vector3dVector(object_obb_points)
                     pcd.transform(trans_matrix)
