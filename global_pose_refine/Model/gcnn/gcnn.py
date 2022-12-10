@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from points_shape_detect.Loss.ious import IoULoss
 from points_shape_detect.Method.trans import transPointArray
+from points_shape_detect.Method.rotate import compute_rotation_matrix_from_ortho6d
 
 from global_pose_refine.Method.weight import setWeight
 from global_pose_refine.Model.gcnn.gclayer_collect import \
@@ -84,11 +85,11 @@ class GCNN(nn.Module):
             nn.Linear(self.feature_dim // 2, 3),
         )
 
-        self.euler_angle_encoder = nn.Sequential(
+        self.rotate_encoder = nn.Sequential(
             nn.Linear(self.feature_dim, self.feature_dim // 2),
             nn.LeakyReLU(0.2),
             nn.Dropout(p=0.5),
-            nn.Linear(self.feature_dim // 2, 3),
+            nn.Linear(self.feature_dim // 2, 6),
         )
 
         self.scale_encoder = nn.Sequential(
@@ -325,12 +326,22 @@ class GCNN(nn.Module):
         #  obj_feats_wall = data['predictions']['obj_feats_wall']
         #  obj_feats_floor = data['predictions']['obj_feats_floor']
 
+        B = obj_feats_object.shape[0]
+
         translate_inv = self.translate_encoder(obj_feats_object)
-        euler_angle_inv = self.euler_angle_encoder(obj_feats_object)
+        rotation_inv = self.rotate_encoder(obj_feats_object)
         scale_inv = self.scale_encoder(obj_feats_object)
 
+        rotate_matrix_inv_list = []
+        for i in range(B):
+            rotate_matrix_inv = compute_rotation_matrix_from_ortho6d(
+                rotation_inv[i])
+            rotate_matrix_inv_list.append(rotate_matrix_inv.unsqueeze(0))
+        rotate_matrix_inv = torch.cat(rotate_matrix_inv_list, 0)
+
         data['predictions']['refine_translate_inv'] = translate_inv
-        data['predictions']['refine_euler_angle_inv'] = euler_angle_inv
+        data['predictions']['refine_rotation_inv'] = rotation_inv
+        data['predictions']['refine_rotate_matrix_inv'] = rotate_matrix_inv
         data['predictions']['refine_scale_inv'] = scale_inv
         return data
 
@@ -339,13 +350,14 @@ class GCNN(nn.Module):
         trans_object_obb_center = data['inputs']['trans_object_obb_center']
 
         refine_translate_inv = data['predictions']['refine_translate_inv']
-        refine_euler_angle_inv = data['predictions']['refine_euler_angle_inv']
+        refine_rotate_matrix_inv = data['predictions'][
+            'refine_rotate_matrix_inv']
         refine_scale_inv = data['predictions']['refine_scale_inv']
 
         object_num = trans_object_obb.shape[1]
 
         object_translate_inv = refine_translate_inv[:, :object_num]
-        object_euler_angle_inv = refine_euler_angle_inv[:, :object_num]
+        object_rotate_matrix_inv = refine_rotate_matrix_inv[:, :object_num]
         object_scale_inv = refine_scale_inv[:, :object_num]
 
         trans_back_object_obb_list = []
@@ -359,14 +371,24 @@ class GCNN(nn.Module):
                 trans_obb = trans_object_obb[batch_idx][i].reshape(-1, 3)
                 trans_obb_center = trans_object_obb_center[batch_idx][i]
                 translate_inv = object_translate_inv[batch_idx][i]
-                euler_angle_inv = object_euler_angle_inv[batch_idx][i]
+                zero_euler_angle = torch.zeros(3).to(torch.float32).cuda()
+                rotate_matrix_inv = object_rotate_matrix_inv[batch_idx][i]
                 scale_inv = object_scale_inv[batch_idx][i]
 
                 trans_back_object_obb = transPointArray(trans_obb,
                                                         translate_inv,
-                                                        euler_angle_inv,
+                                                        zero_euler_angle,
                                                         scale_inv,
                                                         is_inverse=True)
+
+                trans_back_object_obb_center = torch.mean(
+                    trans_back_object_obb, 0)
+
+                trans_back_object_obb = trans_back_object_obb - trans_back_object_obb_center
+                trans_back_object_obb = torch.matmul(trans_back_object_obb,
+                                                     rotate_matrix_inv)
+                trans_back_object_obb = trans_back_object_obb + trans_back_object_obb_center
+
                 trans_back_object_abb = torch.hstack(
                     (torch.min(trans_back_object_obb,
                                0)[0], torch.max(trans_back_object_obb, 0)[0]))
@@ -398,7 +420,7 @@ class GCNN(nn.Module):
         data['predictions'][
             'refine_object_translate_inv'] = object_translate_inv
         data['predictions'][
-            'refine_object_euler_angle_inv'] = object_euler_angle_inv
+            'refine_object_rotate_matrix_inv'] = object_rotate_matrix_inv
         data['predictions']['refine_object_scale_inv'] = object_scale_inv
         data['predictions']['refine_object_obb'] = trans_back_object_obb
         data['predictions']['refine_object_abb'] = trans_back_object_abb
@@ -411,8 +433,8 @@ class GCNN(nn.Module):
     def loss(self, data):
         refine_object_translate_inv = data['predictions'][
             'refine_object_translate_inv']
-        refine_object_euler_angle_inv = data['predictions'][
-            'refine_object_euler_angle_inv']
+        refine_object_rotate_matrix_inv = data['predictions'][
+            'refine_object_rotate_matrix_inv']
         refine_object_scale_inv = data['predictions'][
             'refine_object_scale_inv']
         refine_object_obb = data['predictions']['refine_object_obb']
@@ -420,7 +442,7 @@ class GCNN(nn.Module):
         refine_object_obb_center = data['predictions'][
             'refine_object_obb_center']
         gt_object_translate_inv = data['inputs']['translate_inv']
-        gt_object_euler_angle_inv = data['inputs']['euler_angle_inv']
+        gt_object_rotate_matrix_inv = data['inputs']['rotate_matrix_inv']
         gt_object_scale_inv = data['inputs']['scale_inv']
         gt_object_obb = data['inputs']['object_obb']
         gt_object_abb = data['inputs']['object_abb']
@@ -428,8 +450,8 @@ class GCNN(nn.Module):
 
         loss_refine_translate_inv_l1 = self.l1_loss(
             refine_object_translate_inv, gt_object_translate_inv)
-        loss_refine_euler_angle_inv_l1 = self.l1_loss(
-            refine_object_euler_angle_inv, gt_object_euler_angle_inv)
+        loss_refine_rotate_matrix_inv_l1 = self.l1_loss(
+            refine_object_rotate_matrix_inv, gt_object_rotate_matrix_inv)
         loss_refine_scale_inv_l1 = self.l1_loss(refine_object_scale_inv,
                                                 gt_object_scale_inv)
         loss_refine_object_obb_l1 = self.l1_loss(refine_object_obb,
@@ -445,7 +467,7 @@ class GCNN(nn.Module):
         data['losses'][
             'loss_refine_translate_inv_l1'] = loss_refine_translate_inv_l1
         data['losses'][
-            'loss_refine_euler_angle_inv_l1'] = loss_refine_euler_angle_inv_l1
+            'loss_refine_rotate_matrix_inv_l1'] = loss_refine_rotate_matrix_inv_l1
         data['losses']['loss_refine_scale_inv_l1'] = loss_refine_scale_inv_l1
         data['losses']['loss_refine_object_obb_l1'] = loss_refine_object_obb_l1
         data['losses']['loss_refine_object_abb_l1'] = loss_refine_object_abb_l1
@@ -460,7 +482,7 @@ class GCNN(nn.Module):
             return data
 
         data = setWeight(data, 'loss_refine_translate_inv_l1', 1000)
-        data = setWeight(data, 'loss_refine_euler_angle_inv_l1', 1000)
+        data = setWeight(data, 'loss_refine_rotate_matrix_inv_l1', 1000)
         data = setWeight(data, 'loss_refine_scale_inv_l1', 1000)
         data = setWeight(data, 'loss_refine_object_obb_l1', 1000)
         data = setWeight(data, 'loss_refine_object_abb_l1', 1000)

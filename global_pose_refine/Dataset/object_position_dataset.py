@@ -15,6 +15,7 @@ from points_shape_detect.Method.bbox import (getBBoxPointList,
 from points_shape_detect.Method.trans import (getInverseTrans,
                                               normalizePointArray,
                                               transPointArray)
+from points_shape_detect.Method.matrix import getRotateMatrix
 from scene_layout_detect.Module.layout_map_builder import LayoutMapBuilder
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -202,9 +203,11 @@ class ObjectPositionDataset(Dataset):
         object_obb_center_list = []
         translate_list = []
         euler_angle_list = []
+        rotate_matrix_list = []
         scale_list = []
         translate_inv_list = []
         euler_angle_inv_list = []
+        rotate_matrix_inv_list = []
         scale_inv_list = []
         trans_object_obb_list = []
         trans_object_abb_list = []
@@ -216,14 +219,21 @@ class ObjectPositionDataset(Dataset):
 
             translate = (np.random.rand(3) - 0.5) * 0.5
             euler_angle = np.array([0.0, 0.0, np.random.rand() - 0.5]) * 360.0
+            rotate_matrix = getRotateMatrix(euler_angle)
+            zero_euler_angle = np.array([0.0, 0.0, 0.0])
             scale_value = 1.0 + (np.random.rand() - 0.5) * 1.0
             scale = np.ones(3) * scale_value
 
             translate_inv, euler_angle_inv, scale_inv = getInverseTrans(
                 translate, euler_angle, scale)
+            rotate_matrix_inv = rotate_matrix.T
 
-            trans_object_obb = transPointArray(obb, translate, euler_angle,
-                                               scale)
+            trans_object_obb = obb - object_obb_center
+            trans_object_obb = trans_object_obb @ rotate_matrix
+            trans_object_obb = trans_object_obb + object_obb_center
+
+            trans_object_obb = transPointArray(trans_object_obb, translate,
+                                               zero_euler_angle, scale)
             trans_object_obb_center = np.mean(trans_object_obb, axis=0)
             trans_object_abb = np.hstack(
                 (np.min(trans_object_obb,
@@ -233,9 +243,11 @@ class ObjectPositionDataset(Dataset):
             object_obb_center_list.append(object_obb_center)
             translate_list.append(translate)
             euler_angle_list.append(euler_angle)
+            rotate_matrix_list.append(rotate_matrix)
             scale_list.append(scale)
             translate_inv_list.append(translate_inv)
             euler_angle_inv_list.append(euler_angle_inv)
+            rotate_matrix_inv_list.append(rotate_matrix_inv)
             scale_inv_list.append(scale_inv)
             trans_object_obb_list.append(trans_object_obb)
             trans_object_abb_list.append(trans_object_abb)
@@ -245,9 +257,11 @@ class ObjectPositionDataset(Dataset):
         object_obb_center = np.array(object_obb_center_list)
         translate = np.array(translate_list)
         euler_angle = np.array(euler_angle_list)
+        rotate_matrix = np.array(rotate_matrix_list)
         scale = np.array(scale_list)
         translate_inv = np.array(translate_inv_list)
         euler_angle_inv = np.array(euler_angle_inv_list)
+        rotate_matrix_inv = np.array(rotate_matrix_inv_list)
         scale_inv = np.array(scale_inv_list)
         trans_object_obb = np.array(trans_object_obb_list)
         trans_object_abb = np.array(trans_object_abb_list)
@@ -275,9 +289,11 @@ class ObjectPositionDataset(Dataset):
 
         translate = torch.from_numpy(translate).float()
         euler_angle = torch.from_numpy(euler_angle).float()
+        rotate_matrix = torch.from_numpy(rotate_matrix).float()
         scale = torch.from_numpy(scale).float()
         translate_inv = torch.from_numpy(translate_inv).float()
         euler_angle_inv = torch.from_numpy(euler_angle_inv).float()
+        rotate_matrix_inv = torch.from_numpy(rotate_matrix_inv).float()
         scale_inv = torch.from_numpy(scale_inv).float()
 
         trans_object_obb = torch.from_numpy(trans_object_obb).float().reshape(
@@ -318,7 +334,7 @@ class ObjectPositionDataset(Dataset):
         data['inputs']['object_obb_center'] = object_obb_center
 
         data['inputs']['translate_inv'] = translate_inv
-        data['inputs']['euler_angle_inv'] = euler_angle_inv
+        data['inputs']['rotate_matrix_inv'] = rotate_matrix_inv
         data['inputs']['scale_inv'] = scale_inv
         return data
 
