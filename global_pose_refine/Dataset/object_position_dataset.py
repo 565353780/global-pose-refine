@@ -218,11 +218,11 @@ class ObjectPositionDataset(Dataset):
             object_obb_center = np.mean(obb, axis=0)
 
             translate = (np.random.rand(3) - 0.5) * 0.5
-            euler_angle = np.array([0.0, 0.0, np.random.rand() - 0.5]) * 360.0
+            euler_angle = (np.random.rand(3) - 0.5) * np.array(
+                [45.0, 45.0, 360.0])
             rotate_matrix = getRotateMatrix(euler_angle)
             zero_euler_angle = np.array([0.0, 0.0, 0.0])
-            scale_value = 1.0 + (np.random.rand() - 0.5) * 1.0
-            scale = np.ones(3) * scale_value
+            scale = 1.0 + (np.random.rand(3) - 0.5) * 1.0
 
             translate_inv, euler_angle_inv, scale_inv = getInverseTrans(
                 translate, euler_angle, scale)
