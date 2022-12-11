@@ -228,13 +228,14 @@ class ObjectPositionDataset(Dataset):
                 translate, euler_angle, scale)
             rotate_matrix_inv = rotate_matrix.T
 
-            trans_object_obb = obb - object_obb_center
-            trans_object_obb = trans_object_obb @ rotate_matrix
-            trans_object_obb = trans_object_obb + object_obb_center
-
-            trans_object_obb = transPointArray(trans_object_obb, translate,
+            trans_object_obb = transPointArray(obb, translate,
                                                zero_euler_angle, scale)
             trans_object_obb_center = np.mean(trans_object_obb, axis=0)
+
+            trans_object_obb = trans_object_obb - trans_object_obb_center
+            trans_object_obb = trans_object_obb @ rotate_matrix
+            trans_object_obb = trans_object_obb + trans_object_obb_center
+
             trans_object_abb = np.hstack(
                 (np.min(trans_object_obb,
                         axis=0), np.max(trans_object_obb, axis=0)))

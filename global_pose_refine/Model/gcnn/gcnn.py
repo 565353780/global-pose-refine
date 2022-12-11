@@ -375,19 +375,18 @@ class GCNN(nn.Module):
                 rotate_matrix_inv = object_rotate_matrix_inv[batch_idx][i]
                 scale_inv = object_scale_inv[batch_idx][i]
 
-                trans_back_object_obb = transPointArray(trans_obb,
+                rotate_center = torch.mean(trans_obb, 0)
+
+                trans_back_object_obb = trans_obb - rotate_center
+                trans_back_object_obb = torch.matmul(trans_back_object_obb,
+                                                     rotate_matrix_inv)
+                trans_back_object_obb = trans_back_object_obb + rotate_center
+
+                trans_back_object_obb = transPointArray(trans_back_object_obb,
                                                         translate_inv,
                                                         zero_euler_angle,
                                                         scale_inv,
                                                         is_inverse=True)
-
-                trans_back_object_obb_center = torch.mean(
-                    trans_back_object_obb, 0)
-
-                trans_back_object_obb = trans_back_object_obb - trans_back_object_obb_center
-                trans_back_object_obb = torch.matmul(trans_back_object_obb,
-                                                     rotate_matrix_inv)
-                trans_back_object_obb = trans_back_object_obb + trans_back_object_obb_center
 
                 trans_back_object_abb = torch.hstack(
                     (torch.min(trans_back_object_obb,
