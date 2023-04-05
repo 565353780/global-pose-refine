@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import itertools
 import numpy as np
 from scipy.spatial import ConvexHull
 
@@ -217,3 +218,65 @@ def getOBBSupportDist(obb_1, obb_2):
     if obb_center_1[2] < obb_center_2[2]:
         return getOBBDistZ(obb_1, obb_2)
     return getOBBDistZ(obb_2, obb_1)
+
+
+def getOBBDirection(obb):
+    start = obb.points[0]
+    x_end = obb.points[4]
+    y_end = obb.points[2]
+    z_end = obb.points[1]
+
+    x_direction = x_end - start
+    y_direction = y_end - start
+    z_direction = z_end - start
+
+    x_norm = np.linalg.norm(x_direction)
+    y_norm = np.linalg.norm(y_direction)
+    z_norm = np.linalg.norm(z_direction)
+
+    x_direction /= x_norm
+    y_direction /= y_norm
+    z_direction /= z_norm
+    return [x_direction, y_direction, z_direction]
+
+
+def getDirectionDist(obb_1, obb_2):
+    direction1_list = getOBBDirection(obb_1)
+    dx2, dy2, dz2 = getOBBDirection(obb_2)
+
+    min_direction_dist = float('inf')
+
+    #  for dx, dy, dz in itertools.product([dx2, -dx2], [dy2, -dy2], [dz2, -dz2]):
+    for dx in [dx2, -dx2]:
+        for dy in [dy2, -dy2]:
+            for dz in [dz2, -dz2]:
+                for x_idx in [0, 1, 2]:
+                    dx1_new = direction1_list[x_idx]
+                    current_x_dist = np.linalg.norm(dx1_new - dx)
+                    for y_idx in [0, 1, 2]:
+                        if y_idx == x_idx:
+                            continue
+                        dy1_new = direction1_list[y_idx]
+                        current_y_dist = np.linalg.norm(dy1_new - dy)
+                        for z_idx in [0, 1, 2]:
+                            if z_idx in [x_idx, y_idx]:
+                                continue
+                            dz1_new = direction1_list[z_idx]
+                            current_z_dist = np.linalg.norm(dz1_new - dz)
+
+                            current_dist = current_x_dist + current_y_dist + current_z_dist
+                            if current_dist < min_direction_dist:
+                                min_direction_dist = current_dist
+
+    return min_direction_dist
+
+
+def getOBBPoseDist(obb_1, obb_2):
+    obb_center_1 = getOBBCenter(obb_1)
+    obb_center_2 = getOBBCenter(obb_2)
+    center_dist = getPointDist(obb_center_1, obb_center_2)
+
+    direction_dist = getDirectionDist(obb_1, obb_2)
+
+    pose_dist = center_dist + direction_dist
+    return pose_dist

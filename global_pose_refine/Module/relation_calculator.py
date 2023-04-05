@@ -3,7 +3,7 @@
 
 import numpy as np
 
-from global_pose_refine.Method.dist import getOBBSupportDist
+from global_pose_refine.Method.dist import getOBBSupportDist, getOBBPoseDist
 
 
 class RelationCalculator(object):
@@ -21,10 +21,9 @@ class RelationCalculator(object):
 
         for i in range(obb_num - 1):
             for j in range(i + 1, obb_num):
-                relation_value = 0
-
                 support_dist = getOBBSupportDist(obb_list[i], obb_list[j])
-                relation_value += support_dist
+                pose_dist = getOBBPoseDist(obb_list[i], obb_list[j])
+                relation_value = support_dist + pose_dist
 
                 relation_matrix[i, j] = relation_value
                 relation_matrix[j, i] = relation_value
