@@ -38,10 +38,11 @@ class Detector(object):
         toCuda(data)
 
         wall_position = data['inputs']['wall_position']
+        floor_position = data['inputs']['floor_position']
         trans_object_obb = data['inputs']['trans_object_obb']
 
         wall_num = wall_position.shape[0]
-        floor_num = 1
+        floor_num = floor_position.shape[0]
         object_num = trans_object_obb.shape[0]
 
         data['inputs']['floor_position'] = data['inputs']['floor_position'].to(
