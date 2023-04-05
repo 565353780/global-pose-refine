@@ -20,9 +20,13 @@ class CollectionUnit(nn.Module):
         #  normal_init(self.fc, 0, 0.01)
 
         self.fc = nn.Sequential(
-            nn.Linear(dim_in, dim_out, bias=True),
+            nn.Linear(dim_in, dim_in, bias=True),
             nn.ReLU(True),
-            nn.Linear(dim_out, dim_out, bias=True),
+            nn.Linear(dim_in, dim_out * 2, bias=True),
+            nn.ReLU(True),
+            nn.Linear(dim_out * 2, dim_out * 2, bias=True),
+            nn.ReLU(True),
+            nn.Linear(dim_out * 2, dim_out, bias=True),
             nn.ReLU(True),
             nn.Linear(dim_out, dim_out, bias=True),
         )

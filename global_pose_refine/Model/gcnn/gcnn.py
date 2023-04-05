@@ -50,7 +50,11 @@ class GCNN(nn.Module):
         wall_features_len = sum(self.wall_features.values())
 
         self.object_embedding = nn.Sequential(
+            nn.Linear(object_features_len, self.feature_dim),
+            nn.ReLU(True),
             nn.Linear(object_features_len, self.feature_dim // 2),
+            nn.ReLU(True),
+            nn.Linear(self.feature_dim // 2, self.feature_dim // 2),
             nn.ReLU(True),
             nn.Linear(self.feature_dim // 2, self.feature_dim),
             nn.ReLU(True),
@@ -59,6 +63,8 @@ class GCNN(nn.Module):
         self.relation_embedding = nn.Sequential(
             nn.Linear(relation_features_len, self.feature_dim // 2),
             nn.ReLU(True),
+            nn.Linear(self.feature_dim // 2, self.feature_dim // 2),
+            nn.ReLU(True),
             nn.Linear(self.feature_dim // 2, self.feature_dim),
             nn.ReLU(True),
             nn.Linear(self.feature_dim, self.feature_dim),
@@ -66,12 +72,16 @@ class GCNN(nn.Module):
         self.floor_embedding = nn.Sequential(
             nn.Linear(floor_features_len, self.feature_dim // 2),
             nn.ReLU(True),
+            nn.Linear(self.feature_dim // 2, self.feature_dim // 2),
+            nn.ReLU(True),
             nn.Linear(self.feature_dim // 2, self.feature_dim),
             nn.ReLU(True),
             nn.Linear(self.feature_dim, self.feature_dim),
         )
         self.wall_embedding = nn.Sequential(
             nn.Linear(wall_features_len, self.feature_dim // 2),
+            nn.ReLU(True),
+            nn.Linear(self.feature_dim // 2, self.feature_dim // 2),
             nn.ReLU(True),
             nn.Linear(self.feature_dim // 2, self.feature_dim),
             nn.ReLU(True),
@@ -88,6 +98,9 @@ class GCNN(nn.Module):
         ])
 
         self.translate_encoder = nn.Sequential(
+            nn.Linear(self.feature_dim, self.feature_dim),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5),
             nn.Linear(self.feature_dim, self.feature_dim // 2),
             nn.LeakyReLU(0.2),
             nn.Dropout(p=0.5),
@@ -98,6 +111,9 @@ class GCNN(nn.Module):
         )
 
         self.rotate_encoder = nn.Sequential(
+            nn.Linear(self.feature_dim, self.feature_dim),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5),
             nn.Linear(self.feature_dim, self.feature_dim // 2),
             nn.LeakyReLU(0.2),
             nn.Dropout(p=0.5),
@@ -108,6 +124,9 @@ class GCNN(nn.Module):
         )
 
         self.scale_encoder = nn.Sequential(
+            nn.Linear(self.feature_dim, self.feature_dim),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5),
             nn.Linear(self.feature_dim, self.feature_dim // 2),
             nn.LeakyReLU(0.2),
             nn.Dropout(p=0.5),
