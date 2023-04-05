@@ -2,12 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
-
-import cv2
-import numpy as np
-import open3d as o3d
 import torch
-from tqdm import tqdm
 
 from global_pose_refine.Method.device import toCpu, toCuda, toNumpy
 from global_pose_refine.Model.gcnn.gcnn import GCNN
