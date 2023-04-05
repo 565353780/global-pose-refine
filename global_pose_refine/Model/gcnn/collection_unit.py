@@ -17,14 +17,15 @@ class CollectionUnit(nn.Module):
     def __init__(self, dim_in, dim_out):
         super().__init__()
         #  self.fc = nn.Linear(dim_in, dim_out, bias=True)
-        self.object_embedding = nn.Sequential(
+        #  normal_init(self.fc, 0, 0.01)
+
+        self.fc = nn.Sequential(
             nn.Linear(dim_in, dim_out, bias=True),
             nn.ReLU(True),
             nn.Linear(dim_out, dim_out, bias=True),
             nn.ReLU(True),
             nn.Linear(dim_out, dim_out, bias=True),
         )
-        normal_init(self.fc, 0, 0.01)
         return
 
     def forward(self, target, source, attention_base):
