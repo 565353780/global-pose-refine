@@ -5,8 +5,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from points_shape_detect.Loss.ious import IoULoss
+from points_shape_detect.Method.rotate import \
+    compute_rotation_matrix_from_ortho6d
 from points_shape_detect.Method.trans import transPointArray
-from points_shape_detect.Method.rotate import compute_rotation_matrix_from_ortho6d
 
 from global_pose_refine.Method.weight import setWeight
 from global_pose_refine.Model.gcnn.gclayer_collect import \
@@ -49,22 +50,30 @@ class GCNN(nn.Module):
         wall_features_len = sum(self.wall_features.values())
 
         self.object_embedding = nn.Sequential(
-            nn.Linear(object_features_len, self.feature_dim),
+            nn.Linear(object_features_len, self.feature_dim // 2),
+            nn.ReLU(True),
+            nn.Linear(self.feature_dim // 2, self.feature_dim),
             nn.ReLU(True),
             nn.Linear(self.feature_dim, self.feature_dim),
         )
         self.relation_embedding = nn.Sequential(
-            nn.Linear(relation_features_len, self.feature_dim),
+            nn.Linear(relation_features_len, self.feature_dim // 2),
+            nn.ReLU(True),
+            nn.Linear(self.feature_dim // 2, self.feature_dim),
             nn.ReLU(True),
             nn.Linear(self.feature_dim, self.feature_dim),
         )
         self.floor_embedding = nn.Sequential(
-            nn.Linear(floor_features_len, self.feature_dim),
+            nn.Linear(floor_features_len, self.feature_dim // 2),
+            nn.ReLU(True),
+            nn.Linear(self.feature_dim // 2, self.feature_dim),
             nn.ReLU(True),
             nn.Linear(self.feature_dim, self.feature_dim),
         )
         self.wall_embedding = nn.Sequential(
-            nn.Linear(wall_features_len, self.feature_dim),
+            nn.Linear(wall_features_len, self.feature_dim // 2),
+            nn.ReLU(True),
+            nn.Linear(self.feature_dim // 2, self.feature_dim),
             nn.ReLU(True),
             nn.Linear(self.feature_dim, self.feature_dim),
         )
@@ -82,6 +91,9 @@ class GCNN(nn.Module):
             nn.Linear(self.feature_dim, self.feature_dim // 2),
             nn.LeakyReLU(0.2),
             nn.Dropout(p=0.5),
+            nn.Linear(self.feature_dim // 2, self.feature_dim // 2),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5),
             nn.Linear(self.feature_dim // 2, 3),
         )
 
@@ -89,11 +101,17 @@ class GCNN(nn.Module):
             nn.Linear(self.feature_dim, self.feature_dim // 2),
             nn.LeakyReLU(0.2),
             nn.Dropout(p=0.5),
+            nn.Linear(self.feature_dim // 2, self.feature_dim // 2),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5),
             nn.Linear(self.feature_dim // 2, 6),
         )
 
         self.scale_encoder = nn.Sequential(
             nn.Linear(self.feature_dim, self.feature_dim // 2),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5),
+            nn.Linear(self.feature_dim // 2, self.feature_dim // 2),
             nn.LeakyReLU(0.2),
             nn.Dropout(p=0.5),
             nn.Linear(self.feature_dim // 2, 3),
