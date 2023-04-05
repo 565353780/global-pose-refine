@@ -4,7 +4,6 @@
 import os
 import torch
 import numpy as np
-import open3d as o3d
 from tqdm import tqdm
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
