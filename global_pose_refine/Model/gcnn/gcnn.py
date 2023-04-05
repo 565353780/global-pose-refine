@@ -21,7 +21,7 @@ class GCNN(nn.Module):
         super().__init__()
 
         self.floor_features = {
-            'floor_position': 4 * 3,
+            'floor_position': 3,
             'floor_normal': 3,
             'floor_z_value': 1,
         }
@@ -71,11 +71,11 @@ class GCNN(nn.Module):
 
         self.gcn_collect_feat = nn.ModuleList([
             GraphConvolutionLayerCollect(self.feature_dim, self.feature_dim)
-            for i in range(self.feat_update_group)
+            for _ in range(self.feat_update_group)
         ])
         self.gcn_update_feat = nn.ModuleList([
             GraphConvolutionLayerUpdate(self.feature_dim, self.feature_dim)
-            for i in range(self.feat_update_group)
+            for _ in range(self.feat_update_group)
         ])
 
         self.translate_encoder = nn.Sequential(

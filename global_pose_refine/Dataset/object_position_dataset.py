@@ -171,8 +171,10 @@ class ObjectPositionDataset(Dataset):
         layout_map_builder.updateLayoutMesh()
 
         floor_position = layout_map_builder.layout_map.floor_array
-        floor_normal = np.array([[0.0, 0.0, 1.0]])
-        floor_z_value = np.array([[0.0]])
+        floor_normal = np.array([[0.0, 0.0, 1.0]
+                                 for _ in range(floor_position.shape[0])])
+        floor_z_value = np.array([[0.0]
+                                  for _ in range(floor_position.shape[0])])
 
         wall_position_list = []
         wall_normal_list = []
@@ -197,7 +199,7 @@ class ObjectPositionDataset(Dataset):
 
         object_num = object_obb.shape[0]
         wall_num = wall_position.shape[0]
-        floor_num = 1
+        floor_num = floor_position.shape[0]
 
         object_abb_list = []
         object_obb_center_list = []
