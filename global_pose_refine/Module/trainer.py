@@ -242,6 +242,7 @@ class Trainer(object):
             for_data = self.eval_dataloader
             if print_progress:
                 for_data = tqdm(for_data)
+            #TODO: compute mean losses for one eval epoch
             for data in for_data:
                 self.evalStep(data)
                 self.eval_step += 1
