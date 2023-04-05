@@ -50,7 +50,7 @@ class GCNN(nn.Module):
         wall_features_len = sum(self.wall_features.values())
 
         self.object_embedding = nn.Sequential(
-            nn.Linear(object_features_len, self.feature_dim),
+            nn.Linear(object_features_len, object_features_len),
             nn.ReLU(True),
             nn.Linear(object_features_len, self.feature_dim // 2),
             nn.ReLU(True),
@@ -61,6 +61,8 @@ class GCNN(nn.Module):
             nn.Linear(self.feature_dim, self.feature_dim),
         )
         self.relation_embedding = nn.Sequential(
+            nn.Linear(relation_features_len, relation_features_len),
+            nn.ReLU(True),
             nn.Linear(relation_features_len, self.feature_dim // 2),
             nn.ReLU(True),
             nn.Linear(self.feature_dim // 2, self.feature_dim // 2),
@@ -70,6 +72,8 @@ class GCNN(nn.Module):
             nn.Linear(self.feature_dim, self.feature_dim),
         )
         self.floor_embedding = nn.Sequential(
+            nn.Linear(floor_features_len, floor_features_len),
+            nn.ReLU(True),
             nn.Linear(floor_features_len, self.feature_dim // 2),
             nn.ReLU(True),
             nn.Linear(self.feature_dim // 2, self.feature_dim // 2),
@@ -79,6 +83,8 @@ class GCNN(nn.Module):
             nn.Linear(self.feature_dim, self.feature_dim),
         )
         self.wall_embedding = nn.Sequential(
+            nn.Linear(wall_features_len, wall_features_len),
+            nn.ReLU(True),
             nn.Linear(wall_features_len, self.feature_dim // 2),
             nn.ReLU(True),
             nn.Linear(self.feature_dim // 2, self.feature_dim // 2),
