@@ -246,27 +246,18 @@ def getDirectionDist(obb_1, obb_2):
 
     min_direction_dist = float('inf')
 
-    #  for dx, dy, dz in itertools.product([dx2, -dx2], [dy2, -dy2], [dz2, -dz2]):
-    for dx in [dx2, -dx2]:
-        for dy in [dy2, -dy2]:
-            for dz in [dz2, -dz2]:
-                for x_idx in [0, 1, 2]:
-                    dx1_new = direction1_list[x_idx]
-                    current_x_dist = np.linalg.norm(dx1_new - dx)
-                    for y_idx in [0, 1, 2]:
-                        if y_idx == x_idx:
-                            continue
-                        dy1_new = direction1_list[y_idx]
-                        current_y_dist = np.linalg.norm(dy1_new - dy)
-                        for z_idx in [0, 1, 2]:
-                            if z_idx in [x_idx, y_idx]:
-                                continue
-                            dz1_new = direction1_list[z_idx]
-                            current_z_dist = np.linalg.norm(dz1_new - dz)
+    for dx, dy, dz in itertools.product([dx2, -dx2], [dy2, -dy2], [dz2, -dz2]):
+        for x_idx, y_idx, z_idx in itertools.permutations([0, 1, 2], 3):
+            dx1_new = direction1_list[x_idx]
+            current_x_dist = np.linalg.norm(dx1_new - dx)
+            dy1_new = direction1_list[y_idx]
+            current_y_dist = np.linalg.norm(dy1_new - dy)
+            dz1_new = direction1_list[z_idx]
+            current_z_dist = np.linalg.norm(dz1_new - dz)
 
-                            current_dist = current_x_dist + current_y_dist + current_z_dist
-                            if current_dist < min_direction_dist:
-                                min_direction_dist = current_dist
+            current_dist = current_x_dist + current_y_dist + current_z_dist
+            if current_dist < min_direction_dist:
+                min_direction_dist = current_dist
 
     return min_direction_dist
 
