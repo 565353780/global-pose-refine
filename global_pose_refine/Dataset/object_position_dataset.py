@@ -36,7 +36,7 @@ class ObjectPositionDataset(Dataset):
         self.loadScan2CAD()
         self.updateIdx()
 
-        self.repeat_time = 100
+        self.repeat_time = 1
         return
 
     def reset(self):
