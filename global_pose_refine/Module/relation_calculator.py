@@ -14,7 +14,7 @@ class RelationCalculator(object):
     def calculateRelations(self, obb_list):
         obb_num = len(obb_list)
 
-        if obb_num < 2:
+        if obb_num == 0:
             return None
 
         relation_matrix = np.zeros([obb_num, obb_num], dtype=float)
