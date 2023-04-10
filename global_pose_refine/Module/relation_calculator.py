@@ -3,7 +3,8 @@
 
 import numpy as np
 
-from global_pose_refine.Method.dist import getOBBSupportDist, getOBBPoseDist
+from global_pose_refine.Data.obb import OBB
+from global_pose_refine.Method.dist import getOBBPoseDist, getOBBSupportDist
 
 
 class RelationCalculator(object):
@@ -29,3 +30,12 @@ class RelationCalculator(object):
                 relation_matrix[j, i] = relation_value
 
         return relation_matrix
+
+    def calculateRelationsByABBValueList(self, abb_value_list):
+        obb_list = [OBB.fromABBList(abb_value) for abb_value in abb_value_list]
+        relation_matrix = self.calculateRelations(obb_list)
+        return relation_matrix
+
+    def calculateRelationsByOBBValueList(self, obb_value_list):
+        obb_list = [OBB(obb_value) for obb_value in obb_value_list]
+        return self.calculateRelations(obb_list)
