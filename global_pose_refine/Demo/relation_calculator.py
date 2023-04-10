@@ -20,7 +20,9 @@ def demo():
         [2, 2, 4, 3, 3, 5],
     ]
 
-    relation_calculator = RelationCalculator()
+    pose_weight = 0.5
+
+    relation_calculator = RelationCalculator(pose_weight)
 
     relation_matrix = relation_calculator.calculateRelations(obb_list)
     print('relation_matrix is')

@@ -9,7 +9,8 @@ from global_pose_refine.Method.dist import getOBBPoseDist, getOBBSupportDist
 
 class RelationCalculator(object):
 
-    def __init__(self):
+    def __init__(self, pose_weight=1.0):
+        self.pose_weight = pose_weight
         return
 
     def calculateRelations(self, obb_list):
@@ -24,7 +25,7 @@ class RelationCalculator(object):
             for j in range(i + 1, obb_num):
                 support_dist = getOBBSupportDist(obb_list[i], obb_list[j])
                 pose_dist = getOBBPoseDist(obb_list[i], obb_list[j])
-                relation_value = support_dist + pose_dist
+                relation_value = support_dist + pose_dist * self.pose_weight
 
                 relation_matrix[i, j] = relation_value
                 relation_matrix[j, i] = relation_value

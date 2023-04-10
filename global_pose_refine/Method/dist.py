@@ -269,5 +269,5 @@ def getOBBPoseDist(obb_1, obb_2):
 
     direction_dist = getDirectionDist(obb_1, obb_2)
 
-    pose_dist = center_dist + direction_dist
+    pose_dist = 1.0 / (direction_dist + center_dist + 1e-6)
     return pose_dist
