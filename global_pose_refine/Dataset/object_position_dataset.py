@@ -175,6 +175,13 @@ class ObjectPositionDataset(Dataset):
                                  for _ in range(floor_position.shape[0])])
         floor_z_value = np.array([[0.0]
                                   for _ in range(floor_position.shape[0])])
+        floor_obb = np.hstack([floor_position, floor_position
+                               ]) + [-0.1, -0.1, -0.1, 0.1, 0.1, 0.1]
+        print('floor_obb')
+        print(floor_obb)
+        print(floor_position.shape)
+        print(floor_obb.shape)
+        exit()
 
         wall_position_list = []
         wall_normal_list = []
