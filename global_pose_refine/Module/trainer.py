@@ -120,7 +120,30 @@ class Trainer(object):
     def preProcessData(self, data):
         return data
 
+    def testTrainOnDataset(self):
+        for i in range(len(self.train_dataset)):
+            #  data = self.train_dataset.getBatchItem(i)
+            data = self.train_dataset.__getitem__(i)
+            for key in data['inputs'].keys():
+                try:
+                    _ = data['inputs'][key].shape
+                    data['inputs'][key] = data['inputs'][key].unsqueeze(0)
+                except:
+                    continue
+            toCuda(data)
+            data = self.preProcessData(data)
+            #  renderRefineBBox(data)
+
+            data = self.model(data)
+
+            print(data['inputs'].keys())
+            print(data['predictions'].keys())
+            print(data['losses'].keys())
+            renderRefineBBox(data)
+        return True
+
     def testTrain(self):
+        return self.testTrainOnDataset()
         test_dataloader = DataLoader(self.train_dataset,
                                      batch_size=1,
                                      shuffle=False,
@@ -133,7 +156,7 @@ class Trainer(object):
         for data in tqdm(test_dataloader):
             toCuda(data)
             data = self.preProcessData(data)
-            renderRefineBBox(data)
+            #  renderRefineBBox(data)
 
             data = self.model(data)
 
