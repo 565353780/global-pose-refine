@@ -20,12 +20,17 @@ from scene_layout_detect.Module.layout_map_builder import LayoutMapBuilder
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
+from global_pose_refine.Data.obb import OBB
 from global_pose_refine.Method.path import createFileFolder, renameFile
+from global_pose_refine.Module.relation_calculator import RelationCalculator
 
 
 class ObjectPositionDataset(Dataset):
 
     def __init__(self, training=True, training_percent=0.8):
+        pose_weight = 0.5
+        self.relation_calculator = RelationCalculator(pose_weight)
+
         self.training = training
         self.training_percent = training_percent
 
@@ -175,13 +180,10 @@ class ObjectPositionDataset(Dataset):
                                  for _ in range(floor_position.shape[0])])
         floor_z_value = np.array([[0.0]
                                   for _ in range(floor_position.shape[0])])
-        floor_obb = np.hstack([floor_position, floor_position
-                               ]) + [-0.1, -0.1, -0.1, 0.1, 0.1, 0.1]
-        print('floor_obb')
-        print(floor_obb)
-        print(floor_position.shape)
-        print(floor_obb.shape)
-        exit()
+        floor_abb = np.hstack([floor_position, floor_position
+                               ]) + [-1000, -1000, -0.01, 1000, 1000, 0]
+        floor_obb = np.array(
+            [OBB.fromABBList(abb).toArray() for abb in floor_abb])
 
         wall_position_list = []
         wall_normal_list = []
@@ -203,6 +205,14 @@ class ObjectPositionDataset(Dataset):
 
         wall_position = np.array(wall_position_list)
         wall_normal = np.array(wall_normal_list)
+        wall_obb = np.hstack([wall_position, wall_position])
+        wall_obb[:, :4, :] -= wall_normal.reshape(-1, 1, 3) * 0.01
+        wall_obb[:, 4:, :] += wall_normal.reshape(-1, 1, 3) * 0.01
+
+        obb_list = np.vstack([object_obb, wall_obb, floor_obb])
+        valid_idx_list = range(len(object_obb))
+        relation_matrix = self.relation_calculator.calculateRelationsByOBBValueList(
+            obb_list, valid_idx_list)
 
         object_num = object_obb.shape[0]
         wall_num = wall_position.shape[0]
@@ -322,6 +332,9 @@ class ObjectPositionDataset(Dataset):
         trans_object_abb_eiou = torch.tensor(
             trans_object_abb_eiou_list).float().unsqueeze(-1)
 
+        relation_matrix = torch.from_numpy(relation_matrix).float().unsqueeze(
+            -1)
+
         data = {'inputs': {}, 'predictions': {}, 'losses': {}, 'logs': {}}
 
         data['inputs']['floor_position'] = floor_position
@@ -346,6 +359,8 @@ class ObjectPositionDataset(Dataset):
         data['inputs']['translate_inv'] = translate_inv
         data['inputs']['rotate_matrix_inv'] = rotate_matrix_inv
         data['inputs']['scale_inv'] = scale_inv
+
+        data['inputs']['relation_matrix'] = relation_matrix
         return data
 
     def getBatchItem(self, idx):
