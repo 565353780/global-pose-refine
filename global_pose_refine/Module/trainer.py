@@ -124,12 +124,14 @@ class Trainer(object):
         for i in range(len(self.train_dataset)):
             #  data = self.train_dataset.getBatchItem(i)
             data = self.train_dataset.__getitem__(i)
+
             for key in data['inputs'].keys():
                 try:
                     _ = data['inputs'][key].shape
                     data['inputs'][key] = data['inputs'][key].unsqueeze(0)
                 except:
                     continue
+
             toCuda(data)
             data = self.preProcessData(data)
             #  renderRefineBBox(data)
@@ -143,7 +145,6 @@ class Trainer(object):
         return True
 
     def testTrain(self):
-        return self.testTrainOnDataset()
         test_dataloader = DataLoader(self.train_dataset,
                                      batch_size=1,
                                      shuffle=False,
@@ -151,8 +152,6 @@ class Trainer(object):
                                      num_workers=1,
                                      worker_init_fn=worker_init_fn)
 
-        #  for i in range(len(self.train_dataset)):
-        #  data = self.train_dataset.getBatchItem(i)
         for data in tqdm(test_dataloader):
             toCuda(data)
             data = self.preProcessData(data)
