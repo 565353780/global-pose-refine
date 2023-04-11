@@ -172,7 +172,12 @@ class ObjectPositionDataset(Dataset):
 
         layout_map_builder = LayoutMapBuilder()
         for obb in object_obb:
-            layout_map_builder.addBound(obb)
+            layout_map_builder.addBound(obb[[0, 2, 3, 1]])
+            layout_map_builder.addBound(obb[[0, 1, 5, 4]])
+            layout_map_builder.addBound(obb[[0, 4, 6, 2]])
+            layout_map_builder.addBound(obb[[7, 3, 1, 5]])
+            layout_map_builder.addBound(obb[[7, 5, 4, 6]])
+            layout_map_builder.addBound(obb[[7, 6, 2, 3]])
         layout_map_builder.updateLayoutMesh()
 
         floor_position = layout_map_builder.layout_map.floor_array
