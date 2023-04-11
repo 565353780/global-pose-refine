@@ -12,10 +12,10 @@ from points_shape_detect.Data.bbox import BBox
 from points_shape_detect.Loss.ious import IoULoss
 from points_shape_detect.Method.bbox import (getBBoxPointList,
                                              getOpen3DBBoxFromBBoxArray)
+from points_shape_detect.Method.matrix import getRotateMatrix
 from points_shape_detect.Method.trans import (getInverseTrans,
                                               normalizePointArray,
                                               transPointArray)
-from points_shape_detect.Method.matrix import getRotateMatrix
 from scene_layout_detect.Module.layout_map_builder import LayoutMapBuilder
 from torch.utils.data import Dataset
 from tqdm import tqdm
@@ -209,11 +209,6 @@ class ObjectPositionDataset(Dataset):
         wall_obb[:, :4, :] -= wall_normal.reshape(-1, 1, 3) * 0.01
         wall_obb[:, 4:, :] += wall_normal.reshape(-1, 1, 3) * 0.01
 
-        obb_list = np.vstack([object_obb, wall_obb, floor_obb])
-        valid_idx_list = range(len(object_obb))
-        relation_matrix = self.relation_calculator.calculateRelationsByOBBValueList(
-            obb_list, valid_idx_list)
-
         object_num = object_obb.shape[0]
         wall_num = wall_position.shape[0]
         floor_num = floor_position.shape[0]
@@ -287,10 +282,22 @@ class ObjectPositionDataset(Dataset):
         trans_object_abb = np.array(trans_object_abb_list)
         trans_object_obb_center = np.array(trans_object_obb_center_list)
 
-        trans_object_obb_center_dist_list = [
+        trans_obb_list = np.vstack([trans_object_obb, wall_obb, floor_obb])
+        valid_idx_list = range(len(trans_object_obb))
+        relation_matrix = self.relation_calculator.calculateRelationsByOBBValueList(
+            trans_obb_list, valid_idx_list)
+
+        trans_abb_list = np.array(
+            [OBB(trans_obb).toABBArray() for trans_obb in trans_obb_list])
+        trans_obb_center_list = np.array([
+            np.mean(OBB(trans_obb).points, axis=0)
+            for trans_obb in trans_obb_list
+        ])
+
+        trans_obb_center_dist_list = [
             np.linalg.norm(center2 - center1, ord=2)
-            for center1 in trans_object_obb_center
-            for center2 in trans_object_obb_center
+            for center1 in trans_obb_center_list
+            for center2 in trans_obb_center_list
         ]
 
         floor_position = torch.from_numpy(floor_position).float().reshape(
@@ -322,18 +329,22 @@ class ObjectPositionDataset(Dataset):
         trans_object_obb_center = torch.from_numpy(
             trans_object_obb_center).float()
 
-        trans_object_abb_eiou_list = [
-            IoULoss.EIoU(bbox1, bbox2) for bbox1 in trans_object_abb
-            for bbox2 in trans_object_abb
+        trans_abb_list = torch.from_numpy(trans_abb_list).float().reshape(
+            -1, 6)
+
+        trans_abb_eiou_list = [
+            IoULoss.EIoU(bbox1, bbox2) for bbox1 in trans_abb_list
+            for bbox2 in trans_abb_list
         ]
 
-        trans_object_obb_center_dist = torch.tensor(
-            trans_object_obb_center_dist_list).float().unsqueeze(-1)
-        trans_object_abb_eiou = torch.tensor(
-            trans_object_abb_eiou_list).float().unsqueeze(-1)
-
-        relation_matrix = torch.from_numpy(relation_matrix).float().unsqueeze(
+        trans_obb_center_dist = torch.tensor(
+            trans_obb_center_dist_list).float().unsqueeze(-1)
+        trans_abb_eiou = torch.tensor(trans_abb_eiou_list).float().unsqueeze(
             -1)
+
+        total_num = object_num + wall_num + floor_num
+        relation_matrix = torch.from_numpy(relation_matrix).float().reshape(
+            total_num * total_num, 1)
 
         data = {'inputs': {}, 'predictions': {}, 'losses': {}, 'logs': {}}
 
@@ -348,9 +359,8 @@ class ObjectPositionDataset(Dataset):
         data['inputs']['trans_object_abb'] = trans_object_abb
         data['inputs']['trans_object_obb_center'] = trans_object_obb_center
 
-        data['inputs'][
-            'trans_object_obb_center_dist'] = trans_object_obb_center_dist
-        data['inputs']['trans_object_abb_eiou'] = trans_object_abb_eiou
+        data['inputs']['trans_obb_center_dist'] = trans_obb_center_dist
+        data['inputs']['trans_abb_eiou'] = trans_abb_eiou
 
         data['inputs']['object_obb'] = object_obb
         data['inputs']['object_abb'] = object_abb

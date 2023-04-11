@@ -36,8 +36,9 @@ class GCNN(nn.Module):
             'trans_object_obb_center': 3,
         }
         self.relation_features = {
-            'trans_object_obb_center_dist': 1,
-            'trans_object_abb_eiou': 1,
+            'trans_obb_center_dist': 1,
+            'trans_abb_eiou': 1,
+            'relation_matrix': 1,
         }
 
         self.feature_dim = 512
@@ -296,6 +297,12 @@ class GCNN(nn.Module):
 
         # from here, for compatibility with graph-rcnn, x_obj corresponds to obj/lo vertices
         mask_total_relation_feature = total_relation_feature[relation_mask]
+
+        print("generated relation feature shape:")
+        print(total_relation_feature.shape)
+        print(mask_total_relation_feature.shape)
+        print(data['inputs']['relation_matrix'].shape)
+        exit()
 
         data['predictions']['embed_total_feature'] = embed_total_feature
         data['predictions'][
