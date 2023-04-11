@@ -5,8 +5,7 @@ import os
 import torch
 import numpy as np
 import open3d as o3d
-from tqdm import tqdm
-from torch.utils.data import Dataset
+from scipy.spatial import ConvexHull
 
 from auto_cad_recon.Method.bbox import getOBBFromABB
 from auto_cad_recon.Module.dataset_manager import DatasetManager
@@ -19,6 +18,8 @@ from points_shape_detect.Method.trans import (getInverseTrans,
                                               normalizePointArray,
                                               transPointArray)
 from scene_layout_detect.Module.layout_map_builder import LayoutMapBuilder
+from torch.utils.data import Dataset
+from tqdm import tqdm
 
 from global_pose_refine.Data.obb import OBB
 from global_pose_refine.Method.path import createFileFolder, renameFile
@@ -171,13 +172,12 @@ class ObjectPositionDataset(Dataset):
         object_obb = object_obb[random_idx]
 
         layout_map_builder = LayoutMapBuilder()
-        for obb in object_obb:
-            layout_map_builder.addBound(obb[[0, 2, 3, 1]])
-            layout_map_builder.addBound(obb[[0, 1, 5, 4]])
-            layout_map_builder.addBound(obb[[0, 4, 6, 2]])
-            layout_map_builder.addBound(obb[[7, 3, 1, 5]])
-            layout_map_builder.addBound(obb[[7, 5, 4, 6]])
-            layout_map_builder.addBound(obb[[7, 6, 2, 3]])
+        for i in range(object_obb.shape[0] - 1):
+            for j in range(i + 1, object_obb.shape[0]):
+                points = np.vstack([object_obb[i], object_obb[j]])
+                hull = ConvexHull(points[:, :2])
+                hull_points = points[hull.vertices]
+                layout_map_builder.addBound(hull_points)
         layout_map_builder.updateLayoutMesh()
 
         floor_position = layout_map_builder.layout_map.floor_array
