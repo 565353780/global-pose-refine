@@ -13,7 +13,7 @@ class RelationCalculator(object):
         self.pose_weight = pose_weight
         return
 
-    def calculateRelations(self, obb_list):
+    def calculateRelations(self, obb_list, valid_idx_list=None):
         obb_num = len(obb_list)
 
         if obb_num == 0:
@@ -22,6 +22,9 @@ class RelationCalculator(object):
         relation_matrix = np.zeros([obb_num, obb_num], dtype=float)
 
         for i in range(obb_num - 1):
+            if valid_idx_list is not None:
+                if i not in valid_idx_list:
+                    continue
             for j in range(i + 1, obb_num):
                 support_dist = getOBBSupportDist(obb_list[i], obb_list[j])
                 pose_dist = getOBBPoseDist(obb_list[i], obb_list[j])
@@ -32,11 +35,15 @@ class RelationCalculator(object):
 
         return relation_matrix
 
-    def calculateRelationsByABBValueList(self, abb_value_list):
+    def calculateRelationsByABBValueList(self,
+                                         abb_value_list,
+                                         valid_idx_list=None):
         obb_list = [OBB.fromABBList(abb_value) for abb_value in abb_value_list]
-        relation_matrix = self.calculateRelations(obb_list)
+        relation_matrix = self.calculateRelations(obb_list, valid_idx_list)
         return relation_matrix
 
-    def calculateRelationsByOBBValueList(self, obb_value_list):
+    def calculateRelationsByOBBValueList(self,
+                                         obb_value_list,
+                                         valid_idx_list=None):
         obb_list = [OBB(obb_value) for obb_value in obb_value_list]
-        return self.calculateRelations(obb_list)
+        return self.calculateRelations(obb_list, valid_idx_list)
