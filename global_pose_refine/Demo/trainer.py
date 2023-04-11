@@ -18,11 +18,12 @@ from global_pose_refine.Module.trainer import Trainer
 
 def demo():
     model_file_path = './output/20230405_15:50:42/model_best.pth'
+    model_file_path = ''
     resume_model_only = True
     print_progress = True
 
     trainer = Trainer()
     trainer.loadModel(model_file_path, resume_model_only)
-    #  trainer.testTrain()
-    trainer.train(print_progress)
+    trainer.testTrain()
+    #  trainer.train(print_progress)
     return True

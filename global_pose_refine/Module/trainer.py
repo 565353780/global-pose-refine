@@ -29,8 +29,8 @@ class Trainer(object):
         self.batch_size = 1
         self.lr = 1e-6
         self.weight_decay = 1e-10
-        self.decay_step = 21
-        self.lr_decay = 0.76
+        self.decay_step = 100
+        self.lr_decay = 0.96
         self.lowest_decay = 0.02
         self.step = 0
         self.eval_step = 0

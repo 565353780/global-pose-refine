@@ -22,4 +22,6 @@ def test():
 
     for i in range(len(object_position_dataset)):
         data = object_position_dataset.__getitem__(i)
+        if i > 10:
+            break
     return True

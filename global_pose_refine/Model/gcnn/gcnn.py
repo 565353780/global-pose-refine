@@ -3,7 +3,7 @@
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+#  import torch.nn.functional as F
 from points_shape_detect.Loss.ious import IoULoss
 from points_shape_detect.Method.rotate import \
     compute_rotation_matrix_from_ortho6d
@@ -38,7 +38,6 @@ class GCNN(nn.Module):
         self.relation_features = {
             'trans_obb_center_dist': 1,
             'trans_abb_eiou': 1,
-            'relation_matrix': 1,
         }
 
         self.feature_dim = 512
@@ -141,6 +140,19 @@ class GCNN(nn.Module):
             nn.LeakyReLU(0.2),
             nn.Dropout(p=0.5),
             nn.Linear(self.feature_dim // 2, 3),
+        )
+
+        self.relation_encoder = nn.Sequential(
+            nn.Linear(self.feature_dim, self.feature_dim),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5),
+            nn.Linear(self.feature_dim, self.feature_dim // 2),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5),
+            nn.Linear(self.feature_dim // 2, self.feature_dim // 2),
+            nn.LeakyReLU(0.2),
+            nn.Dropout(p=0.5),
+            nn.Linear(self.feature_dim // 2, 1),
         )
 
         # initiate weights
@@ -282,27 +294,22 @@ class GCNN(nn.Module):
         embed_total_feature = torch.cat(cat_total_feature_list, 1)
 
         # representation of relation vertices connecting obj/lo vertices
-        if total_num > object_num:
-            embed_relation_feature_matrix = embed_relation_feature.reshape(
-                object_num, object_num, -1)
-            total_relation_feature_matrix = F.pad(
-                embed_relation_feature_matrix.permute(2, 0, 1),
-                [0, total_num - object_num, 0, total_num - object_num],
-                "constant", 0.001).permute(1, 2, 0)
-            total_relation_feature = total_relation_feature_matrix.reshape(
-                total_num**2, -1)
-        else:
-            total_relation_feature = embed_relation_feature.reshape(
-                total_num**2, -1)
+        # skip this set default value to create bigger matrix algo
+        #  if total_num > object_num:
+        #  embed_relation_feature_matrix = embed_relation_feature.reshape(
+        #  object_num, object_num, -1)
+        #  total_relation_feature_matrix = F.pad(
+        #  embed_relation_feature_matrix.permute(2, 0, 1),
+        #  [0, total_num - object_num, 0, total_num - object_num],
+        #  "constant", 0.001).permute(1, 2, 0)
+        #  total_relation_feature = total_relation_feature_matrix.reshape(
+        #  total_num**2, -1)
+        #  else:
+        total_relation_feature = embed_relation_feature.reshape(
+            total_num**2, -1)
 
         # from here, for compatibility with graph-rcnn, x_obj corresponds to obj/lo vertices
         mask_total_relation_feature = total_relation_feature[relation_mask]
-
-        print("generated relation feature shape:")
-        print(total_relation_feature.shape)
-        print(mask_total_relation_feature.shape)
-        print(data['inputs']['relation_matrix'].shape)
-        exit()
 
         data['predictions']['embed_total_feature'] = embed_total_feature
         data['predictions'][
@@ -369,6 +376,8 @@ class GCNN(nn.Module):
         data['predictions']['obj_feats_object'] = obj_feats_object
         data['predictions']['obj_feats_wall'] = obj_feats_wall
         data['predictions']['obj_feats_floor'] = obj_feats_floor
+        data['predictions']['mask_relation_feature'] = relation_feature_list[
+            -1]
         return data
 
     def decodeFeature(self, data):
@@ -476,10 +485,10 @@ class GCNN(nn.Module):
         data['predictions'][
             'refine_object_obb_center'] = trans_back_object_obb_center
         if not self.infer:
-            data = self.loss(data)
+            data = self.lossPose(data)
         return data
 
-    def loss(self, data):
+    def lossPose(self, data):
         refine_object_translate_inv = data['predictions'][
             'refine_object_translate_inv']
         refine_object_rotate_matrix_inv = data['predictions'][
@@ -526,6 +535,30 @@ class GCNN(nn.Module):
             'loss_refine_object_abb_eiou'] = loss_refine_object_abb_eiou
         return data
 
+    def decodeRelation(self, data):
+        mask_relation_feature = data['predictions']['mask_relation_feature']
+
+        mask_relation_matrix = self.relation_encoder(mask_relation_feature)
+
+        data['predictions']['mask_relation_matrix'] = mask_relation_matrix
+        if not self.infer:
+            data = self.lossRelation(data)
+        return data
+
+    def lossRelation(self, data):
+        mask_relation_matrix = data['predictions']['mask_relation_matrix']
+        relation_mask = data['predictions']['relation_mask']
+        gt_relation_matrix = data['inputs']['relation_matrix']
+
+        gt_mask_relation_matrix = gt_relation_matrix.reshape(-1,
+                                                             1)[relation_mask]
+
+        loss_relation_l1 = self.l1_loss(mask_relation_matrix,
+                                        gt_mask_relation_matrix)
+
+        data['losses']['loss_relation_l1'] = loss_relation_l1
+        return data
+
     def setWeight(self, data):
         if self.infer:
             return data
@@ -540,6 +573,7 @@ class GCNN(nn.Module):
                          'loss_refine_object_abb_eiou',
                          100,
                          max_value=100)
+        data = setWeight(data, 'loss_relation_l1', 1000)
         return data
 
     def forward(self, data):
@@ -552,6 +586,8 @@ class GCNN(nn.Module):
         data = self.decodeFeature(data)
 
         data = self.updatePose(data)
+
+        data = self.decodeRelation(data)
 
         data = self.setWeight(data)
         return data
