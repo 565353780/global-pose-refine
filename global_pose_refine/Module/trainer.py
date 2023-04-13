@@ -26,8 +26,8 @@ def worker_init_fn(worker_id):
 class Trainer(object):
 
     def __init__(self):
-        self.num_workers = os.cpu_count()
         self.batch_size = 1
+        self.num_workers = 1
         self.lr = 1e-6
         self.weight_decay = 1e-10
         self.decay_step = 100
@@ -150,7 +150,7 @@ class Trainer(object):
                                      batch_size=1,
                                      shuffle=False,
                                      drop_last=False,
-                                     num_workers=os.cpu_count(),
+                                     num_workers=1,
                                      worker_init_fn=worker_init_fn)
 
         for data in tqdm(test_dataloader):
