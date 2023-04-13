@@ -172,12 +172,25 @@ class ObjectPositionDataset(Dataset):
         object_obb = object_obb[random_idx]
 
         layout_map_builder = LayoutMapBuilder()
+        print('====start add bound====', 'item_idx =', idx)
+        add_bound_num = 0
+        assert object_obb.shape[0] > 0
+        print('object_obb num =', object_obb.shape)
         for i in range(object_obb.shape[0] - 1):
             for j in range(i + 1, object_obb.shape[0]):
                 points = np.vstack([object_obb[i], object_obb[j]])
                 hull = ConvexHull(points[:, :2])
                 hull_points = points[hull.vertices]
+                assert hull.vertices.shape[0] > 2
                 layout_map_builder.addBound(hull_points)
+                add_bound_num += 1
+                print('running at', i, j, end='')
+                print('add_bound_num =', add_bound_num)
+        print('====finish add bound====', 'item_idx =', idx)
+        print('====start check bound num====', 'item_idx =', idx)
+        assert add_bound_num > 0, 'dataset getItem failed!, add_bound_num = ' + str(
+            add_bound_num)
+        print('====finish check bound num====', 'item_idx =', idx)
         layout_map_builder.updateLayoutMesh()
 
         floor_position = layout_map_builder.layout_map.floor_array
