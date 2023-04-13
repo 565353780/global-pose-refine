@@ -234,9 +234,12 @@ def getOBBDirection(obb):
     y_norm = np.linalg.norm(y_direction)
     z_norm = np.linalg.norm(z_direction)
 
-    x_direction /= x_norm
-    y_direction /= y_norm
-    z_direction /= z_norm
+    if x_norm > 0:
+        x_direction /= x_norm
+    if y_norm > 0:
+        y_direction /= y_norm
+    if z_norm > 0:
+        z_direction /= z_norm
     return [x_direction, y_direction, z_direction]
 
 
