@@ -18,6 +18,9 @@ from global_pose_refine.Method.time import getCurrentTime
 from global_pose_refine.Model.gcnn.gcnn import GCNN
 from global_pose_refine.Method.render import renderRefineBBox
 
+torch.backends.cudnn.benchmark = True
+torch.autograd.set_detect_anomaly(True)
+
 
 def worker_init_fn(worker_id):
     np.random.seed(np.random.get_state()[1][0] + worker_id)
@@ -123,8 +126,11 @@ class Trainer(object):
 
     def testTrainOnDataset(self):
         for i in range(len(self.train_dataset)):
+            print("----", i, "---- START!")
             #  data = self.train_dataset.getBatchItem(i)
+            print("----", i, "---- load data start!")
             data = self.train_dataset.__getitem__(i)
+            print("----", i, "---- load data finish!")
 
             for key in data['inputs'].keys():
                 try:
@@ -142,7 +148,8 @@ class Trainer(object):
             print(data['inputs'].keys())
             print(data['predictions'].keys())
             print(data['losses'].keys())
-            renderRefineBBox(data)
+            print("----", i, "---- FINISH!")
+            #  renderRefineBBox(data)
         return True
 
     def testTrain(self):

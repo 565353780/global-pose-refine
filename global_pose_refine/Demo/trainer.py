@@ -24,7 +24,7 @@ def demo():
 
     trainer = Trainer()
     trainer.loadModel(model_file_path, resume_model_only)
-    #  trainer.testTrainOnDataset()
+    trainer.testTrainOnDataset()
     #  trainer.testTrain()
-    trainer.train(print_progress)
+    #  trainer.train(print_progress)
     return True
