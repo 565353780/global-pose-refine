@@ -27,10 +27,9 @@ def worker_init_fn(worker_id):
 
 
 class Trainer(object):
-
     def __init__(self):
         self.batch_size = 1
-        self.num_workers = 1
+        self.num_workers = 24
         self.lr = 1e-6
         self.weight_decay = 1e-10
         self.decay_step = 100
@@ -157,7 +156,7 @@ class Trainer(object):
                                      batch_size=1,
                                      shuffle=False,
                                      drop_last=False,
-                                     num_workers=1,
+                                     num_workers=24,
                                      worker_init_fn=worker_init_fn)
 
         for data in tqdm(test_dataloader):
@@ -167,10 +166,10 @@ class Trainer(object):
 
             data = self.model(data)
 
-            print(data['inputs'].keys())
-            print(data['predictions'].keys())
-            print(data['losses'].keys())
-            renderRefineBBox(data)
+            #  print(data['inputs'].keys())
+            #  print(data['predictions'].keys())
+            #  print(data['losses'].keys())
+            #  renderRefineBBox(data)
         return True
 
     def trainStep(self, data):

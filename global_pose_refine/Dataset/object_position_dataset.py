@@ -2,10 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import os
+import cv2
 import torch
 import numpy as np
 import open3d as o3d
-from scipy.spatial import ConvexHull
+from copy import deepcopy
 
 from auto_cad_recon.Method.bbox import getOBBFromABB
 from auto_cad_recon.Module.dataset_manager import DatasetManager
@@ -27,7 +28,6 @@ from global_pose_refine.Module.relation_calculator import RelationCalculator
 
 
 class ObjectPositionDataset(Dataset):
-
     def __init__(self, training=True, training_percent=0.8):
         pose_weight = 0.5
         self.relation_calculator = RelationCalculator(pose_weight)
@@ -152,6 +152,7 @@ class ObjectPositionDataset(Dataset):
 
     def getItem(self, idx, random_object_num=None):
         height = 3
+        convex_hull_scale = 1e8
 
         idx = int(idx / self.repeat_time)
 
@@ -173,17 +174,11 @@ class ObjectPositionDataset(Dataset):
 
         layout_map_builder = LayoutMapBuilder()
 
-        if object_obb.shape[0] == 1:
-            hull = ConvexHull(object_obb[0][:, :2])
-            hull_points = object_obb[0][hull.vertices]
-            layout_map_builder.addBound(hull_points)
-        else:
-            for i in range(object_obb.shape[0] - 1):
-                for j in range(i + 1, object_obb.shape[0]):
-                    points = np.vstack([object_obb[i], object_obb[j]])
-                    hull = ConvexHull(points[:, :2])
-                    hull_points = points[hull.vertices]
-                    layout_map_builder.addBound(hull_points)
+        points = deepcopy(object_obb[:, :, :2]).reshape(-1, 2)
+        scale_points = (deepcopy(points) * convex_hull_scale).astype(int)
+        scale_hull = cv2.convexHull(scale_points)
+        hull = scale_hull.reshape(-1, 2).astype(float) / convex_hull_scale
+        layout_map_builder.addBound(hull)
 
         layout_map_builder.updateLayoutMesh()
 
