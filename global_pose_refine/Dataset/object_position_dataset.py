@@ -178,7 +178,8 @@ class ObjectPositionDataset(Dataset):
         scale_points = (deepcopy(points) * convex_hull_scale).astype(int)
         scale_hull = cv2.convexHull(scale_points)
         hull = scale_hull.reshape(-1, 2).astype(float) / convex_hull_scale
-        layout_map_builder.addBound(hull)
+        hull_points = np.hstack([hull, np.zeros([hull.shape[0], 1])])
+        layout_map_builder.addBound(hull_points)
 
         layout_map_builder.updateLayoutMesh()
 
