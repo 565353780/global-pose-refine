@@ -148,7 +148,7 @@ class Trainer(object):
             print(data['predictions'].keys())
             print(data['losses'].keys())
             print("----", i, "---- FINISH!")
-            #  renderRefineBBox(data)
+            renderRefineBBox(data)
         return True
 
     def testTrain(self):

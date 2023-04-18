@@ -151,7 +151,7 @@ class ObjectPositionDataset(Dataset):
         return True
 
     def getItem(self, idx, random_object_num=None):
-        height = 3
+        wall_height = 3
         convex_hull_scale = 1e8
 
         idx = int(idx / self.repeat_time)
@@ -181,7 +181,7 @@ class ObjectPositionDataset(Dataset):
         hull_points = np.hstack([hull, np.zeros([hull.shape[0], 1])])
         layout_map_builder.addBound(hull_points)
 
-        layout_map_builder.updateLayoutMesh()
+        layout_map_builder.updateLayoutMesh(skip_floor=True)
 
         floor_position = layout_map_builder.layout_map.floor_array
         floor_normal = np.array([[0.0, 0.0, 1.0]
@@ -201,8 +201,8 @@ class ObjectPositionDataset(Dataset):
 
             wall_position = np.array([
                 floor_position[start_idx], floor_position[end_idx],
-                floor_position[end_idx] + [0.0, 0.0, height],
-                floor_position[start_idx] + [0.0, 0.0, height]
+                floor_position[end_idx] + [0.0, 0.0, wall_height],
+                floor_position[start_idx] + [0.0, 0.0, wall_height]
             ])
             wall_diff = wall_position[1] - wall_position[0]
             wall_normal = np.array([-wall_diff[1], wall_diff[0], 0])
@@ -383,8 +383,6 @@ class ObjectPositionDataset(Dataset):
 
     def getBatchItem(self, idx):
         batch_size = 10
-
-        height = 3
 
         idx = int(idx / self.repeat_time)
 
