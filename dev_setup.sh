@@ -7,10 +7,7 @@ git clone https://github.com/565353780/scan2cad-dataset-manage.git
 git clone https://github.com/565353780/shapenet-dataset-manage.git
 git clone https://github.com/565353780/scannet-sim-manage.git
 
-cd auto-cad-recon
-./setup.sh
-
-cd ../mesh-manage
+cd ./mesh-manage
 ./setup.sh
 
 cd ../udf-generate
@@ -30,5 +27,5 @@ cd ../scannet-sim-manage
 
 pip install tqdm open3d numpy
 
-pip install torch torchvision torchaudio \
-  --extra-index-url https://download.pytorch.org/whl/cu118
+pip install torch==1.13.1+cu117 torchvision==0.14.1+cu117 torchaudio==0.13.1 \
+  --extra-index-url https://download.pytorch.org/whl/cu117
