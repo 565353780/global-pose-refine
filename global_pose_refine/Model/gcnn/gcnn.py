@@ -17,7 +17,6 @@ from global_pose_refine.Model.gcnn.gclayer_update import \
 
 
 class GCNN(nn.Module):
-
     def __init__(self, infer=False):
         super().__init__()
 
@@ -552,11 +551,17 @@ class GCNN(nn.Module):
 
         gt_mask_relation_matrix = gt_relation_matrix.reshape(-1,
                                                              1)[relation_mask]
+        gt_mask_relation_symmetry_matrix = torch.transpose(
+            gt_relation_matrix, 0, 1).reshape(-1, 1)[relation_mask]
 
         loss_relation_l1 = self.l1_loss(mask_relation_matrix,
                                         gt_mask_relation_matrix)
 
+        loss_relation_symmetry_l1 = self.l1_loss(
+            mask_relation_matrix, gt_mask_relation_symmetry_matrix)
+
         data['losses']['loss_relation_l1'] = loss_relation_l1
+        data['losses']['loss_relation_symmetry_l1'] = loss_relation_symmetry_l1
         return data
 
     def setWeight(self, data):
@@ -574,6 +579,7 @@ class GCNN(nn.Module):
                          100,
                          max_value=100)
         data = setWeight(data, 'loss_relation_l1', 1000)
+        data = setWeight(data, 'loss_relation_symmetry_l1', 1000)
         return data
 
     def forward(self, data):
