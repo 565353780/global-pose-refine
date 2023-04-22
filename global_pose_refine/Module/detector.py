@@ -3,13 +3,13 @@
 
 import os
 import torch
+import numpy as np
 
 from global_pose_refine.Method.device import toCpu, toCuda, toNumpy
 from global_pose_refine.Model.gcnn.gcnn import GCNN
 
 
 class Detector(object):
-
     def __init__(self, model_file_path=None):
         self.model = GCNN(True).cuda()
 
@@ -60,11 +60,10 @@ class Detector(object):
             'trans_object_obb_center'].to(torch.float32).reshape(
                 1, object_num, -1)
 
-        data['inputs']['trans_object_obb_center_dist'] = data['inputs'][
-            'trans_object_obb_center_dist'].to(torch.float32).reshape(
-                1, -1, 1)
-        data['inputs']['trans_object_abb_eiou'] = data['inputs'][
-            'trans_object_abb_eiou'].to(torch.float32).reshape(1, -1, 1)
+        data['inputs']['trans_obb_center_dist'] = data['inputs'][
+            'trans_obb_center_dist'].to(torch.float32).reshape(1, -1, 1)
+        data['inputs']['trans_abb_eiou'] = data['inputs']['trans_abb_eiou'].to(
+            torch.float32).reshape(1, -1, 1)
 
         data = self.model(data)
 
