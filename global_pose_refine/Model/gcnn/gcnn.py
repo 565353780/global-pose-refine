@@ -536,7 +536,7 @@ class GCNN(nn.Module):
         return data
 
     def decodeRelation(self, data):
-        object_position = data['inputs']['object_position']
+        object_obb = data['inputs']['object_obb']
         floor_position = data['inputs']['floor_position']
         wall_position = data['inputs']['wall_position']
         relation_mask = data['predictions']['relation_mask']
@@ -544,7 +544,7 @@ class GCNN(nn.Module):
 
         mask_relation_matrix = self.relation_encoder(mask_relation_feature)
 
-        total_num = object_position.shape[1] + floor_position.shape[
+        total_num = object_obb.shape[1] + floor_position.shape[
             1] + wall_position.shape[1]
 
         relation_matrix = torch.zeros((total_num**2, 1)).float().cuda()
