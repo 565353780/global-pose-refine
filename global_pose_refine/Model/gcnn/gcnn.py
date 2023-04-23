@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import torch
+import numpy as np
 import torch.nn as nn
 #  import torch.nn.functional as F
 from points_shape_detect.Loss.ious import IoULoss
@@ -535,30 +536,36 @@ class GCNN(nn.Module):
         return data
 
     def decodeRelation(self, data):
+        object_position = data['inputs']['object_position']
+        floor_position = data['inputs']['floor_position']
+        wall_position = data['inputs']['wall_position']
+        relation_mask = data['predictions']['relation_mask']
         mask_relation_feature = data['predictions']['mask_relation_feature']
 
         mask_relation_matrix = self.relation_encoder(mask_relation_feature)
 
-        data['predictions']['mask_relation_matrix'] = mask_relation_matrix
+        total_num = object_position.shape[1] + floor_position.shape[
+            1] + wall_position.shape[1]
+
+        relation_matrix = torch.zeros((total_num**2, 1)).float().cuda()
+        relation_matrix[relation_mask] = mask_relation_matrix
+        relation_matrix = relation_matrix.reshape((1, total_num, total_num))
+
+        data['predictions']['relation_matrix'] = relation_matrix
         if not self.infer:
             data = self.lossRelation(data)
         return data
 
     def lossRelation(self, data):
-        mask_relation_matrix = data['predictions']['mask_relation_matrix']
-        relation_mask = data['predictions']['relation_mask']
+        relation_matrix = data['predictions']['relation_matrix']
         gt_relation_matrix = data['inputs']['relation_matrix']
 
-        gt_mask_relation_matrix = gt_relation_matrix.reshape(-1,
-                                                             1)[relation_mask]
-        gt_mask_relation_symmetry_matrix = torch.transpose(
-            gt_relation_matrix, 0, 1).reshape(-1, 1)[relation_mask]
+        relation_symmetry_matrix = torch.transpose(relation_matrix, 1, 2)
 
-        loss_relation_l1 = self.l1_loss(mask_relation_matrix,
-                                        gt_mask_relation_matrix)
+        loss_relation_l1 = self.l1_loss(relation_matrix, gt_relation_matrix)
 
-        loss_relation_symmetry_l1 = self.l1_loss(
-            mask_relation_matrix, gt_mask_relation_symmetry_matrix)
+        loss_relation_symmetry_l1 = self.l1_loss(relation_matrix,
+                                                 relation_symmetry_matrix)
 
         data['losses']['loss_relation_l1'] = loss_relation_l1
         data['losses']['loss_relation_symmetry_l1'] = loss_relation_symmetry_l1

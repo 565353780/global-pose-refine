@@ -350,9 +350,7 @@ class ObjectPositionDataset(Dataset):
         trans_abb_eiou = torch.tensor(trans_abb_eiou_list).float().unsqueeze(
             -1)
 
-        total_num = object_num + wall_num + floor_num
-        relation_matrix = torch.from_numpy(relation_matrix).float().reshape(
-            total_num * total_num, 1)
+        relation_matrix = torch.from_numpy(relation_matrix).float()
 
         data = {'inputs': {}, 'predictions': {}, 'losses': {}, 'logs': {}}
 
