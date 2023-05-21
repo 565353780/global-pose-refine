@@ -4,6 +4,16 @@
 import torch
 
 
+def addBatch(data):
+    for key in data['inputs'].keys():
+        try:
+            _ = data['inputs'][key].shape
+            data['inputs'][key] = data['inputs'][key].unsqueeze(0)
+        except:
+            continue
+    return data
+
+
 def toDevice(data, device):
     for first_key in data.keys():
         for key, item in data[first_key].items():

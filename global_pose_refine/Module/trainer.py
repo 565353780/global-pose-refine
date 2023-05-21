@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from global_pose_refine.Dataset.object_position_dataset import ObjectPositionDataset
-from global_pose_refine.Method.device import toCuda
+from global_pose_refine.Method.device import addBatch, toCuda
 from global_pose_refine.Method.path import (createFileFolder, removeFile,
                                             renameFile)
 from global_pose_refine.Method.time import getCurrentTime
@@ -131,12 +131,7 @@ class Trainer(object):
             data = self.train_dataset.__getitem__(i)
             print("----", i, "---- load data finish!")
 
-            for key in data['inputs'].keys():
-                try:
-                    _ = data['inputs'][key].shape
-                    data['inputs'][key] = data['inputs'][key].unsqueeze(0)
-                except:
-                    continue
+            data = addBatch(data)
 
             toCuda(data)
             data = self.preProcessData(data)
