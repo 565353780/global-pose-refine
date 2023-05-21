@@ -3,7 +3,6 @@
 
 import os
 import torch
-import numpy as np
 
 from global_pose_refine.Method.device import toCpu, toCuda, toNumpy
 from global_pose_refine.Model.gcnn.gcnn import GCNN

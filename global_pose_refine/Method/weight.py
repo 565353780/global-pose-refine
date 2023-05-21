@@ -3,6 +3,7 @@
 
 import torch
 
+
 def cutLoss(data, loss_name, min_value=None, max_value=None):
     if min_value is not None:
         data['losses'][loss_name] = torch.max(
