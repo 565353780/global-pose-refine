@@ -17,7 +17,7 @@ from global_pose_refine.Module.trainer import Trainer
 
 
 def demo():
-    model_file_path = './output/20230423_00:13:47/model_best.pth'
+    model_file_path = './output/20230423_18:36:38/model_best.pth'
     resume_model_only = False
     print_progress = True
 
